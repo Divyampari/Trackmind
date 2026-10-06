@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# FactoryGuard generated files
+*.pt
+outputs/
+data/tracking/*.json
