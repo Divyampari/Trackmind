@@ -1,0 +1,89 @@
+{
+  "video_name": "my_test.mp4",
+  "resolution": [
+    1080,
+    720
+  ],
+  "zones": [
+    {
+      "name": "Warning Zone A",
+      "type": "warning",
+      "polygon": [
+        [
+          548.0,
+          231.0
+        ],
+        [
+          612.0,
+          352.0
+        ],
+        [
+          714.0,
+          304.0
+        ],
+        [
+          638.0,
+          166.0
+        ],
+        [
+          574.0,
+          215.0
+        ]
+      ],
+      "dwell_threshold": 10.0,
+      "description": "Forklift / transit warning corridor"
+    },
+    {
+      "name": "Machine Zone B",
+      "type": "restricted",
+      "polygon": [
+        [
+          318.0,
+          249.0
+        ],
+        [
+          362.0,
+          479.0
+        ],
+        [
+          505.0,
+          444.0
+        ],
+        [
+          417.0,
+          222.0
+        ]
+      ],
+      "dwell_threshold": 5.0,
+      "description": "Restricted machinery cell"
+    },
+    {
+      "name": "Machine Zone C",
+      "type": "restricted",
+      "polygon": [
+        [
+          942.0,
+          267.0
+        ],
+        [
+          995.0,
+          416.0
+        ],
+        [
+          1090.0,
+          398.0
+        ],
+        [
+          1031.0,
+          208.0
+        ],
+        [
+          972.0,
+          214.0
+        ]
+      ],
+      "dwell_threshold": 5.0,
+      "description": "Restricted machinery cell"
+    }
+  ]
+}

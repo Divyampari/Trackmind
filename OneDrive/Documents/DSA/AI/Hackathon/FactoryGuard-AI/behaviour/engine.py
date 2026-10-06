@@ -82,11 +82,6 @@ class BehaviourEngine:
         Returns:
             Tuple of (annotated_frame, list_of_new_incidents_in_this_frame).
         """
-        # Ensure default preset zones exist if none were configured
-        if not self.zone_manager.zones and frame is not None:
-            h, w = frame.shape[:2]
-            self.zone_manager.generate_default_preset_zones((w, h))
-
         # 1. Update ZoneDetector state
         events = self.zone_detector.update(
             frame_number=frame_number,
@@ -162,12 +157,8 @@ class BehaviourEngine:
                 fourcc = cv2.VideoWriter_fourcc(*"mp4v")
                 writer = cv2.VideoWriter(output_video_path, fourcc, fps, (w, h))
 
-        # Ensure preset zones if empty
-        if not self.zone_manager.zones:
-            self.zone_manager.generate_default_preset_zones((resolution[0], resolution[1]), video_name=video_name)
-
         logger.info(
-            "Starting Phase 2 Behaviour Analysis: '%s' (%d zones configured)",
+            "Starting Phase 2 Behaviour Analysis: '%s' (%d zone(s) configured)",
             video_name, len(self.zone_manager.zones)
         )
 

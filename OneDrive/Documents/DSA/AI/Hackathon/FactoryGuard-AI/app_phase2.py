@@ -24,6 +24,8 @@ import os
 import sys
 import time
 
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
 from behaviour.engine import BehaviourEngine
 from behaviour.zone_manager import ZoneManager
 from detection.tracker import get_tracking_data, process_video, DEFAULT_MODEL, DEFAULT_CONFIDENCE
@@ -155,7 +157,13 @@ def main() -> None:
     tracking_data = get_tracking_data(tracking_path)
 
     # Initialize Zone Manager
-    zone_mgr = ZoneManager(args.zones)
+    zones_file = args.zones
+    if zones_file is None:
+        default_cfg = os.path.join("data", "zones", "factory_zone_config.json")
+        if os.path.isfile(default_cfg):
+            zones_file = default_cfg
+
+    zone_mgr = ZoneManager(zones_file)
 
     # Initialize Phase 2 Behaviour Engine
     engine = BehaviourEngine(
