@@ -1,0 +1,11 @@
+﻿# FactoryGuard AI - Tuned ByteTrack Configuration
+# Optimized for factory safety monitoring: minimizes ID switches during walking/cycling/occlusions
+# and prevents spurious track initialization from noise/static objects.
+
+tracker_type: bytetrack
+track_high_thresh: 0.45    # First-stage matching threshold for high-confidence detections
+track_low_thresh: 0.10     # Second-stage matching threshold to recover occluded/weak detections
+new_track_thresh: 0.55     # High bar for spawning a brand new track ID (prevents false positives)
+track_buffer: 90           # Keep lost tracks alive for 90 frames (~3 seconds @ 30fps)
+match_thresh: 0.85         # IoU association threshold for track-detection association
+fuse_score: True           # Fuse detection score with motion for enhanced association stability
