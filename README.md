@@ -378,3 +378,4 @@ The long-term objective is to transform raw factory video into meaningful, expla
 <img width="1411" height="380" alt="img6" src="https://github.com/user-attachments/assets/2319bbcb-e756-487b-9b26-f2c78f71e4b4" />
 <img width="1600" height="618" alt="image" src="https://github.com/user-attachments/assets/ec1b9f11-101e-4ecc-bef6-a45ac5094636" />
 
+```
