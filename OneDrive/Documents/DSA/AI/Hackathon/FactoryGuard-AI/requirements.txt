@@ -1,7 +1,8 @@
-﻿# FactoryGuard AI - Phase 1 Dependencies
+# FactoryGuard AI - Phase 1 Dependencies
 # Computer Vision Foundation: Person Detection & Tracking
 
 ultralytics>=8.0.0
 opencv-python>=4.8.0
 numpy>=1.24.0
+pyyaml>=6.0
 lap>=0.5.12

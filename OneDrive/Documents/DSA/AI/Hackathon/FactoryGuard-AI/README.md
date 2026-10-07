@@ -1,4 +1,4 @@
-﻿# FactoryGuard AI
+# FactoryGuard AI
 
 **AI-Powered Factory Safety Monitoring System**
 
@@ -15,8 +15,8 @@ The project is built collaboratively across **4 phases**:
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **Phase 1** | Computer Vision Foundation (Detection & Tracking) | ✅ Refined & Verified |
-| **Phase 2** | Behaviour Intelligence | 🔲 Pending |
-| **Phase 3** | Evidence & Incident Intelligence | 🔲 Pending |
+| **Phase 2** | Behaviour Intelligence | ✅ Completed & Verified |
+| **Phase 3** | Evidence & Incident Intelligence | ✅ Completed & Verified |
 | **Phase 4** | Dashboard & User Interface | 🔲 Pending |
 
 ---
@@ -202,6 +202,117 @@ python tests/test_integration.py
 
 ---
 
+## Phase 2 — Behaviour Intelligence
+
+Phase 2 builds upon the Phase 1 tracking representation to perform spatial and temporal behaviour reasoning:
+
+- **Zone Management (`behaviour/zone_manager.py`)**: Polygonal restricted and warning zones with interactive drawing, JSON serialization, and auto presets.
+- **Zone Detection (`behaviour/zone_detector.py`)**: Real-time point-in-polygon containment, entry/exit state tracking, dwell time accumulation, and temporary tracking occlusion grace periods.
+- **PPE Interface (`behaviour/ppe_interface.py`)**: Pluggable safety compliance interface (hard hat, hi-vis vest, protective footwear).
+
+---
+
+## Phase 3 — Evidence & Incident Intelligence
+
+Phase 3 transforms raw behaviour events into persistent, structured, evidence-backed safety incidents:
+
+- **Source-Agnostic Incident Manager (`behaviour/incident_manager.py`)**:
+  - Unique Incident IDs (`INC-0001`, `INC-0002`, ...)
+  - Severity classification: `WARNING`, `HIGH`, `CRITICAL`
+  - Alert deduplication with configurable cooldown windows
+  - Continuous duration and status lifecycle updates (`OPEN`, `CLOSED`)
+  - Rich query API (`get_all_incidents()`, `get_incidents_by_severity()`, `get_incidents_by_worker()`, `get_incidents_by_zone()`, `get_summary()`)
+- **Visual Evidence Capture (`behaviour/evidence.py`)**:
+  - Automatic frame snapshot capture upon safety violations
+  - Semi-transparent zone highlighting and colored bounding boxes
+  - Operator-grade metadata banner (Incident ID, Worker ID, Zone, Timestamp `MM:SS.s`, Frame, Severity pill)
+  - Persistent storage in `data/incidents/evidence/INC-xxxx.jpg`
+- **Machine-Readable JSON Reporting (`data/incidents/incidents_report.json`)**:
+  - Contains `source_info`, `total_incidents`, `severity_summary`, `zone_summary`, `worker_summary`, and structured `incidents` list.
+
+### Incident Report Schema (`data/incidents/incidents_report.json`)
+
+```json
+{
+  "source_info": {
+    "video_name": "my_test.mp4",
+    "video_path": "videos/my_test.mp4",
+    "resolution": [1280, 714],
+    "fps": 30.0,
+    "processed_frames": 857,
+    "processed_at": "2026-10-07T02:30:20.108864"
+  },
+  "total_incidents": 11,
+  "severity_summary": {
+    "CRITICAL": 0,
+    "HIGH": 7,
+    "WARNING": 4
+  },
+  "zone_summary": {
+    "Chemical Storage & Corridor": 4,
+    "Machine Zone A": 7
+  },
+  "worker_summary": {
+    "Worker_1": 2,
+    "Worker_2": 1,
+    "Worker_3": 1
+  },
+  "incidents": [
+    {
+      "incident_id": "INC-0001",
+      "worker_id": 2,
+      "event_type": "warning_zone_entry",
+      "event": "warning_zone_entry",
+      "timestamp": 2.5,
+      "frame_number": 75,
+      "zone": "Chemical Storage & Corridor",
+      "zone_type": "warning",
+      "severity": "warning",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": "videos/my_test.mp4",
+      "evidence_frame": "data/incidents/evidence/INC-0001.jpg",
+      "evidence": "data/incidents/evidence/INC-0001.jpg",
+      "status": "OPEN",
+      "description": "Worker 2 entered WARNING zone 'Chemical Storage & Corridor'.",
+      "ppe": null,
+      "worker_bbox": [920.1, 10.5, 960.3, 85.0],
+      "worker_center": [940.2, 47.7]
+    }
+  ]
+}
+```
+
+---
+
+## Running Phase 3 Pipeline
+
+```bash
+# Run Phase 3 end-to-end processing
+python app_phase3.py
+
+# Run with custom video and report output path
+python app_phase3.py --video videos/my_test.mp4 --output-report data/incidents/my_report.json
+```
+
+---
+
+## Running Tests
+
+```bash
+# Phase 1 Tracking Integration Test
+python tests/test_integration.py
+
+# Phase 2 Behaviour Intelligence Test Suite
+python -m unittest tests/test_phase2.py
+
+# Phase 3 Incident & Evidence Intelligence Test Suite
+python -m unittest tests/test_phase3.py
+```
+
+---
+
 ## Pretrained Models & Attribution
 
 - **Detection:** Ultralytics YOLOv8s (pretrained on COCO dataset). *Not trained by our team.*
@@ -214,3 +325,4 @@ python tests/test_integration.py
 - **Prolonged Occlusions (>3s):** If a worker is occluded for more than 90 consecutive frames (~3 seconds) and reappears far away, a new tracking ID may be assigned.
 - **Extreme Crowding:** Multiple overlapping workers moving in close proximity may occasionally experience identity swaps if bounding boxes severely overlap.
 - **Hardware Requirement:** YOLOv8s runs at ~5.7 FPS on CPU and >60 FPS on GPU.
+
