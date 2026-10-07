@@ -1,21 +1,19 @@
 ﻿"""
 FactoryGuard AI - Worker Detection & Tracking Module
 
-Phase 1: Computer Vision Foundation
+Phase 1 & Phase 2 Integration: Computer Vision Foundation & PPE Detection
 
-This module provides reliable person detection and tracking for factory
-safety monitoring. It uses Ultralytics YOLO (pretrained YOLOv8s) for person
-detection and tuned ByteTrack for persistent worker ID assignment across
-frames, with low false positives and high ID stability during walking,
-cycling, and brief occlusions.
+This module provides reliable person detection, ByteTrack multi-object
+tracking, and worker-level PPE compliance detection (Helmet, Vest, Boots)
+via Roboflow inference and local interval caching.
 
 Supports:
     - Pre-recorded video files (MP4, AVI, MKV, etc.)
-    - Live webcam feeds (default laptop webcam or USB camera)
+    - Live webcam streams (default laptop webcam or external USB camera)
 
 Output Contract (for Phase 2+ integration):
     - Structured tracking data as JSON (tracking_data.json or webcam_tracking_data.json)
-    - Annotated output video with bounding boxes & worker IDs
+    - Annotated output video with bounding boxes, worker IDs, and PPE badges
     - Frame-by-frame worker records with:
         * worker ID (persistent across frames where possible)
         * bounding box [x1, y1, x2, y2] in pixel coordinates
@@ -23,24 +21,13 @@ Output Contract (for Phase 2+ integration):
         * frame number (0-indexed)
         * timestamp (derived from video FPS or session elapsed time, in seconds)
         * detection confidence (0.0 - 1.0)
+        * ppe: {"helmet": True/False/"unknown", "vest": ..., "boots": ...}
 
 Coordinate Conventions:
     - Bounding box: [x1, y1, x2, y2] where (x1,y1) is top-left, (x2,y2) is bottom-right
     - Center: [cx, cy] computed as midpoint of bounding box
     - All coordinates are in pixels relative to the original video/webcam resolution
     - Origin (0, 0) is the top-left corner of the frame
-
-Usage:
-    from detection.tracker import process_video, process_webcam, get_tracking_data
-
-    # Video file processing
-    tracking_data = process_video("videos/my_test.mp4")
-
-    # Live webcam processing
-    tracking_data = process_webcam(camera_index=0)
-
-    # Load previously saved tracking data
-    tracking_data = get_tracking_data("data/tracking/tracking_data.json")
 """
 
 import json
@@ -48,12 +35,19 @@ import os
 import time
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Union
+from typing import Optional, Union, Dict, Any
 
 import cv2
 import numpy as np
 import yaml
 from ultralytics import YOLO
+
+from .ppe_detector import (
+    PPEDetector,
+    PPEResult,
+    DEFAULT_PPE_INTERVAL_SECONDS,
+    DEFAULT_PPE_CONFIDENCE_THRESHOLD,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -74,12 +68,15 @@ DEFAULT_WEBCAM_TRACKING_FILE = "webcam_tracking_data.json"
 DEFAULT_WEBCAM_OUTPUT_VIDEO = "webcam_output.mp4"
 DEFAULT_TRACKER_CFG = os.path.join("models", "trackers", "bytetrack_factoryguard.yaml")
 
-# Annotation colours & style
-BOX_COLOR = (0, 255, 128)             # Green bounding box (BGR)
+# Annotation colours & style (BGR)
+BOX_COLOR = (0, 255, 128)             # Green bounding box
 TEXT_COLOR = (255, 255, 255)          # White text
 LABEL_BG_COLOR = (40, 40, 40)        # Dark background for labels
+PPE_PASS_COLOR = (0, 230, 115)        # Green for PPE verified (True)
+PPE_FAIL_COLOR = (40, 40, 255)        # Bright red for PPE violation (False)
+PPE_UNK_COLOR = (180, 180, 180)       # Gray for PPE unknown
 FONT = cv2.FONT_HERSHEY_SIMPLEX
-FONT_SCALE = 0.6
+FONT_SCALE = 0.55
 FONT_THICKNESS = 2
 BOX_THICKNESS = 2
 
@@ -111,27 +108,32 @@ def ensure_default_tracker_config(cfg_path: str = DEFAULT_TRACKER_CFG) -> str:
 # ---------------------------------------------------------------------------
 @dataclass
 class WorkerRecord:
-    """A single worker detection in a single frame.
+    """A single worker detection in a single frame with optional PPE status.
 
     Attributes:
         id: Persistent tracking ID assigned by ByteTrack.
         bbox: Bounding box as [x1, y1, x2, y2] in pixels.
         center: Center point as [cx, cy] in pixels.
         confidence: Detection confidence score (0.0 - 1.0).
+        ppe: Optional dict containing {"helmet": ..., "vest": ..., "boots": ...}.
     """
     id: int
     bbox: list
     center: list
     confidence: float
+    ppe: Optional[dict] = None
 
     def to_dict(self) -> dict:
         """Convert to a plain dictionary for JSON serialisation."""
-        return {
+        data = {
             "id": self.id,
             "bbox": [round(float(c), 1) for c in self.bbox],
             "center": [round(float(c), 1) for c in self.center],
             "confidence": round(float(self.confidence), 4),
         }
+        if self.ppe is not None:
+            data["ppe"] = self.ppe
+        return data
 
 
 @dataclass
@@ -199,15 +201,19 @@ class TrackingData:
 # Core tracker class
 # ---------------------------------------------------------------------------
 class WorkerTracker:
-    """Detects and tracks workers in factory video footage or live webcam.
+    """Detects and tracks workers and monitors PPE compliance.
 
-    Uses Ultralytics YOLO for person detection and ByteTrack for
-    multi-object tracking with persistent ID assignment.
+    Uses Ultralytics YOLO for person detection, ByteTrack for persistent ID
+    tracking, and PPEDetector (Roboflow) for helmet/vest/boots understanding.
 
     Args:
         model_path: Path or name of the YOLO model (auto-downloads if needed).
         confidence: Minimum detection confidence threshold.
         tracker_config: Path to tracker YAML config (defaults to tuned ByteTrack).
+        ppe_detector: Optional custom PPEDetector instance.
+        enable_ppe: Whether to enable Roboflow PPE detection.
+        ppe_interval: Sampling interval in seconds for PPE inference (default: 1.0s).
+        roboflow_api_key: Optional explicit Roboflow API key.
     """
 
     def __init__(
@@ -215,10 +221,26 @@ class WorkerTracker:
         model_path: str = DEFAULT_MODEL,
         confidence: float = DEFAULT_CONFIDENCE,
         tracker_config: Optional[str] = None,
+        ppe_detector: Optional[PPEDetector] = None,
+        enable_ppe: bool = True,
+        ppe_interval: float = DEFAULT_PPE_INTERVAL_SECONDS,
+        roboflow_api_key: Optional[str] = None,
     ):
         self.model_path = model_path
         self.confidence = confidence
         self.tracker_config = tracker_config or ensure_default_tracker_config()
+        self.enable_ppe = enable_ppe
+
+        if ppe_detector is not None:
+            self.ppe_detector = ppe_detector
+        elif enable_ppe:
+            self.ppe_detector = PPEDetector(
+                api_key=roboflow_api_key,
+                inference_interval_seconds=ppe_interval,
+            )
+        else:
+            self.ppe_detector = None
+
         self.model = None
 
     def _load_model(self) -> None:
@@ -240,7 +262,7 @@ class WorkerTracker:
         output_video_path: Optional[str] = None,
         tracking_output_path: Optional[str] = None,
     ) -> TrackingData:
-        """Process an entire video: detect, track, annotate, and export data.
+        """Process an entire video: detect, track, inspect PPE, annotate, and export.
 
         Args:
             video_path: Path to the input video file.
@@ -251,17 +273,10 @@ class WorkerTracker:
 
         Returns:
             TrackingData: Structured tracking data for the entire video.
-
-        Raises:
-            FileNotFoundError: If the video file does not exist.
-            ValueError: If the video cannot be opened.
-            RuntimeError: If the model fails to load.
         """
-        # --- Validate input ---
         if not os.path.isfile(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
-        # --- Set default output paths ---
         if output_video_path is None:
             output_video_path = os.path.join(DEFAULT_OUTPUT_DIR, DEFAULT_OUTPUT_VIDEO)
         if tracking_output_path is None:
@@ -269,15 +284,12 @@ class WorkerTracker:
                 DEFAULT_TRACKING_DIR, DEFAULT_TRACKING_FILE
             )
 
-        # --- Ensure output directories exist ---
         os.makedirs(os.path.dirname(output_video_path) or ".", exist_ok=True)
         os.makedirs(os.path.dirname(tracking_output_path) or ".", exist_ok=True)
 
-        # --- Load model ---
         if self.model is None:
             self._load_model()
 
-        # --- Open video ---
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(
@@ -297,7 +309,6 @@ class WorkerTracker:
 
         video_filename = os.path.basename(video_path)
 
-        # --- Initialise video writer ---
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         writer = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
         if not writer.isOpened():
@@ -307,7 +318,6 @@ class WorkerTracker:
                 f"Check that the output directory is writable."
             )
 
-        # --- Initialise tracking data ---
         tracking_data = TrackingData(
             video=video_filename,
             fps=fps,
@@ -315,7 +325,6 @@ class WorkerTracker:
             resolution=[width, height],
         )
 
-        # --- Process frames ---
         frame_number = 0
         try:
             while True:
@@ -325,17 +334,14 @@ class WorkerTracker:
 
                 timestamp = frame_number / fps
 
-                # Run YOLO tracking with tuned ByteTrack
                 frame_record = self._process_frame(frame, frame_number, timestamp)
                 tracking_data.frames.append(frame_record)
 
-                # Annotate frame
                 annotated = self._annotate_frame(frame, frame_record)
                 writer.write(annotated)
 
                 frame_number += 1
 
-                # Progress logging every 100 frames
                 if frame_number % 100 == 0:
                     pct = (frame_number / max(total_frames_estimate, 1)) * 100
                     logger.info(
@@ -351,13 +357,9 @@ class WorkerTracker:
             writer.release()
 
         tracking_data.total_frames = frame_number
-
-        # --- Save tracking data ---
         tracking_data.save(tracking_output_path)
 
-        logger.info(
-            "Processing complete. %d frames processed.", frame_number
-        )
+        logger.info("Processing complete. %d frames processed.", frame_number)
         logger.info("Output video: %s", output_video_path)
         logger.info("Tracking data: %s", tracking_output_path)
 
@@ -371,41 +373,19 @@ class WorkerTracker:
         show_preview: bool = True,
         max_frames: Optional[int] = None,
     ) -> TrackingData:
-        """Process live video from a webcam feed with real-time tracking.
-
-        Uses the same YOLO + ByteTrack tracking logic as process_video to ensure
-        100% compatibility with downstream Phase 2 contracts.
-
-        Args:
-            camera_index: Index of the webcam device (default: 0).
-            output_video_path: Optional path to record the annotated webcam session.
-            tracking_output_path: Path for tracking JSON output.
-                Defaults to 'data/tracking/webcam_tracking_data.json'.
-            show_preview: If True, displays live OpenCV preview window (press 'q' to stop).
-            max_frames: Optional max frames limit (useful for automated testing).
-
-        Returns:
-            TrackingData: Structured tracking data for the webcam session.
-
-        Raises:
-            RuntimeError: If the webcam cannot be opened.
-        """
-        # --- Set default output path ---
+        """Process live video from a webcam feed with real-time tracking and PPE monitoring."""
         if tracking_output_path is None:
             tracking_output_path = os.path.join(
                 DEFAULT_TRACKING_DIR, DEFAULT_WEBCAM_TRACKING_FILE
             )
 
-        # Ensure output directory exists
         os.makedirs(os.path.dirname(tracking_output_path) or ".", exist_ok=True)
         if output_video_path:
             os.makedirs(os.path.dirname(output_video_path) or ".", exist_ok=True)
 
-        # --- Load model ---
         if self.model is None:
             self._load_model()
 
-        # --- Open webcam ---
         logger.info("Opening webcam at camera index: %d", camera_index)
         cap = cv2.VideoCapture(camera_index)
         if not cap.isOpened():
@@ -427,7 +407,6 @@ class WorkerTracker:
             camera_index, width, height, fps
         )
 
-        # --- Optional video recorder ---
         writer = None
         if output_video_path:
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -436,7 +415,6 @@ class WorkerTracker:
                 logger.warning("Could not initialize video writer for %s. Continuing without recording.", output_video_path)
                 writer = None
 
-        # --- Initialise tracking data ---
         tracking_data = TrackingData(
             video=f"webcam_{camera_index}",
             fps=fps,
@@ -453,6 +431,7 @@ class WorkerTracker:
         print("  LIVE WEBCAM STREAMING ACTIVE")
         print(f"  Camera Index : {camera_index}")
         print(f"  Resolution   : {width}x{height}")
+        print(f"  PPE Mode     : {'Enabled (Roboflow)' if self.enable_ppe else 'Disabled'}")
         print("  Press 'q' or 'ESC' in the preview window to stop tracking.")
         print("=" * 60)
         print()
@@ -464,14 +443,11 @@ class WorkerTracker:
                     logger.warning("Failed to grab frame from webcam. Ending session.")
                     break
 
-                # Session-relative timestamp
                 timestamp = time.time() - session_start_time
 
-                # Run shared YOLO + ByteTrack logic
                 frame_record = self._process_frame(frame, frame_number, timestamp)
                 tracking_data.frames.append(frame_record)
 
-                # Annotate frame
                 annotated = self._annotate_frame(frame, frame_record, is_live=True)
 
                 if writer is not None:
@@ -504,13 +480,9 @@ class WorkerTracker:
                     pass
 
         tracking_data.total_frames = frame_number
-
-        # --- Save tracking data ---
         tracking_data.save(tracking_output_path)
 
-        logger.info(
-            "Webcam session ended. %d frames processed.", frame_number
-        )
+        logger.info("Webcam session ended. %d frames processed.", frame_number)
         if output_video_path and writer is not None:
             logger.info("Webcam recorded output: %s", output_video_path)
         logger.info("Webcam tracking data saved: %s", tracking_output_path)
@@ -520,16 +492,7 @@ class WorkerTracker:
     def _process_frame(
         self, frame: np.ndarray, frame_number: int, timestamp: float
     ) -> FrameRecord:
-        """Run detection and tracking on a single frame.
-
-        Args:
-            frame: The video frame as a NumPy array (BGR).
-            frame_number: Current frame index (0-based).
-            timestamp: Frame timestamp in seconds.
-
-        Returns:
-            FrameRecord with all detected workers in this frame.
-        """
+        """Run person detection, ByteTrack tracking, and PPE evaluation on a single frame."""
         frame_record = FrameRecord(frame=frame_number, timestamp=timestamp)
 
         try:
@@ -554,27 +517,34 @@ class WorkerTracker:
         boxes = results[0].boxes
 
         for i in range(len(boxes)):
-            # Extract bounding box
             xyxy = boxes.xyxy[i].cpu().numpy()
             x1, y1, x2, y2 = float(xyxy[0]), float(xyxy[1]), float(xyxy[2]), float(xyxy[3])
-
-            # Extract confidence
             conf = float(boxes.conf[i].cpu().numpy())
 
-            # Extract tracking ID
             track_id = -1
             if boxes.id is not None:
                 track_id = int(boxes.id[i].cpu().numpy())
 
-            # Compute center
             cx = (x1 + x2) / 2.0
             cy = (y1 + y2) / 2.0
+
+            # --- PPE Detection for tracked worker ---
+            ppe_dict = None
+            if self.enable_ppe and self.ppe_detector is not None and track_id >= 0:
+                ppe_result = self.ppe_detector.update_worker(
+                    frame=frame,
+                    worker_id=track_id,
+                    bbox=[x1, y1, x2, y2],
+                    timestamp=timestamp,
+                )
+                ppe_dict = ppe_result.to_dict()
 
             worker = WorkerRecord(
                 id=track_id,
                 bbox=[x1, y1, x2, y2],
                 center=[cx, cy],
                 confidence=conf,
+                ppe=ppe_dict,
             )
             frame_record.workers.append(worker)
 
@@ -583,35 +553,27 @@ class WorkerTracker:
     def _annotate_frame(
         self, frame: np.ndarray, frame_record: FrameRecord, is_live: bool = False
     ) -> np.ndarray:
-        """Draw bounding boxes and labels on a video frame.
-
-        Args:
-            frame: Original video frame (BGR).
-            frame_record: FrameRecord containing workers to annotate.
-            is_live: Whether this frame is part of a live webcam stream.
-
-        Returns:
-            Annotated frame as a NumPy array.
-        """
+        """Draw bounding boxes, worker IDs, and PPE compliance status on a frame."""
         annotated = frame.copy()
 
         for worker in frame_record.workers:
             x1, y1, x2, y2 = [int(c) for c in worker.bbox]
             track_id = worker.id
             conf = worker.confidence
+            ppe = worker.ppe
 
             # Draw bounding box
             cv2.rectangle(annotated, (x1, y1), (x2, y2), BOX_COLOR, BOX_THICKNESS)
 
-            # Build label
+            # Build top label
             if track_id >= 0:
-                label = f"Worker {track_id} | Person | {conf:.2f}"
+                top_label = f"Worker {track_id} | Person {conf:.2f}"
             else:
-                label = f"Person | {conf:.2f}"
+                top_label = f"Person | {conf:.2f}"
 
-            # Measure text size for background rectangle
+            # Measure text size
             (text_w, text_h), baseline = cv2.getTextSize(
-                label, FONT, FONT_SCALE, FONT_THICKNESS
+                top_label, FONT, FONT_SCALE, FONT_THICKNESS
             )
             label_y = max(y1 - 10, text_h + 5)
 
@@ -623,17 +585,20 @@ class WorkerTracker:
                 LABEL_BG_COLOR,
                 -1,
             )
-
             # Draw label text
             cv2.putText(
                 annotated,
-                label,
+                top_label,
                 (x1 + 4, label_y),
                 FONT,
                 FONT_SCALE,
                 TEXT_COLOR,
                 FONT_THICKNESS,
             )
+
+            # Draw PPE status badge if PPE information is available
+            if ppe:
+                self._draw_ppe_badge(annotated, x1, y2, ppe)
 
         # Draw frame info overlay
         status_prefix = "LIVE WEBCAM" if is_live else "FRAME"
@@ -655,6 +620,47 @@ class WorkerTracker:
 
         return annotated
 
+    def _draw_ppe_badge(self, frame: np.ndarray, x: int, y: int, ppe: dict) -> None:
+        """Draw a compact, color-coded PPE status badge below the worker box."""
+        # Format PPE items: (Name, Status)
+        items = [
+            ("H", ppe.get("helmet", "unknown")),
+            ("V", ppe.get("vest", "unknown")),
+            ("B", ppe.get("boots", "unknown")),
+        ]
+
+        badge_text = "PPE: " + " ".join(
+            f"{name}:{'YES' if status is True else 'NO' if status is False else '?'}"
+            for name, status in items
+        )
+
+        (bw, bh), _ = cv2.getTextSize(badge_text, FONT, 0.45, 1)
+        badge_y = min(y + bh + 12, frame.shape[0] - 5)
+
+        # Badge background
+        cv2.rectangle(
+            frame,
+            (x, badge_y - bh - 4),
+            (x + bw + 8, badge_y + 4),
+            (25, 25, 25),
+            -1,
+        )
+
+        # Color indicator based on overall compliance
+        has_violation = any(s is False for _, s in items)
+        all_passed = all(s is True for _, s in items)
+        badge_color = PPE_FAIL_COLOR if has_violation else (PPE_PASS_COLOR if all_passed else PPE_UNK_COLOR)
+
+        cv2.putText(
+            frame,
+            badge_text,
+            (x + 4, badge_y),
+            FONT,
+            0.45,
+            badge_color,
+            1,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Module-level convenience functions (stable public API)
@@ -664,28 +670,20 @@ def process_video(
     model_path: str = DEFAULT_MODEL,
     confidence: float = DEFAULT_CONFIDENCE,
     tracker_config: Optional[str] = None,
+    enable_ppe: bool = True,
+    ppe_interval: float = DEFAULT_PPE_INTERVAL_SECONDS,
+    roboflow_api_key: Optional[str] = None,
     output_video_path: Optional[str] = None,
     tracking_output_path: Optional[str] = None,
 ) -> TrackingData:
-    """Process a video file and produce tracking data + annotated video.
-
-    Primary entry point for video-file processing in Phase 1.
-
-    Args:
-        video_path: Path to the input video file.
-        model_path: YOLO model name or path (default: yolov8s.pt).
-        confidence: Minimum detection confidence (default: 0.45).
-        tracker_config: Optional custom ByteTrack YAML config path.
-        output_video_path: Path for annotated output video.
-        tracking_output_path: Path for tracking JSON output.
-
-    Returns:
-        TrackingData: Complete structured tracking data.
-    """
+    """Process a video file and produce tracking data (+ PPE status) + annotated video."""
     tracker = WorkerTracker(
         model_path=model_path,
         confidence=confidence,
         tracker_config=tracker_config,
+        enable_ppe=enable_ppe,
+        ppe_interval=ppe_interval,
+        roboflow_api_key=roboflow_api_key,
     )
     return tracker.process_video(
         video_path,
@@ -699,33 +697,22 @@ def process_webcam(
     model_path: str = DEFAULT_MODEL,
     confidence: float = DEFAULT_CONFIDENCE,
     tracker_config: Optional[str] = None,
+    enable_ppe: bool = True,
+    ppe_interval: float = DEFAULT_PPE_INTERVAL_SECONDS,
+    roboflow_api_key: Optional[str] = None,
     output_video_path: Optional[str] = None,
     tracking_output_path: Optional[str] = None,
     show_preview: bool = True,
     max_frames: Optional[int] = None,
 ) -> TrackingData:
-    """Process a live webcam stream and produce tracking data (+ optional recorded video).
-
-    Primary entry point for webcam processing in Phase 1. Uses the same underlying
-    YOLO + ByteTrack logic as process_video.
-
-    Args:
-        camera_index: Camera device index (default: 0).
-        model_path: YOLO model name or path (default: yolov8s.pt).
-        confidence: Minimum detection confidence (default: 0.45).
-        tracker_config: Optional custom ByteTrack YAML config path.
-        output_video_path: Path to record annotated output video (optional).
-        tracking_output_path: Path for tracking JSON output (default: data/tracking/webcam_tracking_data.json).
-        show_preview: Whether to display live preview window (press 'q' to quit).
-        max_frames: Optional frame limit.
-
-    Returns:
-        TrackingData: Complete structured tracking data.
-    """
+    """Process a live webcam stream and produce tracking data (+ PPE status)."""
     tracker = WorkerTracker(
         model_path=model_path,
         confidence=confidence,
         tracker_config=tracker_config,
+        enable_ppe=enable_ppe,
+        ppe_interval=ppe_interval,
+        roboflow_api_key=roboflow_api_key,
     )
     return tracker.process_webcam(
         camera_index=camera_index,
@@ -737,21 +724,7 @@ def process_webcam(
 
 
 def get_tracking_data(tracking_json_path: str) -> dict:
-    """Load previously saved tracking data from a JSON file.
-
-    This function allows Phase 2+ modules to consume Phase 1 output
-    without importing or depending on YOLO/ByteTrack internals.
-
-    Args:
-        tracking_json_path: Path to the tracking JSON file.
-
-    Returns:
-        dict: Parsed tracking data dictionary.
-
-    Raises:
-        FileNotFoundError: If the JSON file does not exist.
-        json.JSONDecodeError: If the file contains invalid JSON.
-    """
+    """Load previously saved tracking data from a JSON file."""
     if not os.path.isfile(tracking_json_path):
         raise FileNotFoundError(
             f"Tracking data file not found: {tracking_json_path}"

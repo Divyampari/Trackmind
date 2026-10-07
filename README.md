@@ -8,35 +8,26 @@
 
 ## Overview
 
-FactoryGuard AI is an AI-powered factory safety monitoring system that analyses factory video footage or live webcam streams to detect and track workers, understand their behaviour, identify safety violations, and generate evidence-backed incidents.
+FactoryGuard AI is an AI-powered factory safety monitoring system that analyses factory video footage or live webcam streams to detect and track workers, inspect PPE compliance, understand behavior, identify safety violations, and generate evidence-backed incidents.
 
 The project is built collaboratively across **4 phases**:
 
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **Phase 1** | Computer Vision Foundation (Detection & Tracking) | ✅ Video & Live Webcam Support |
-| **Phase 2** | Behaviour Intelligence | 🔲 Pending |
+| **PPE Detection** | Worker PPE Understanding (Helmet, Vest, Boots via Roboflow) | ✅ Integrated & Cached |
+| **Phase 2** | Behaviour Intelligence & Zone Monitoring | 🔲 In Progress |
 | **Phase 3** | Evidence & Incident Intelligence | 🔲 Pending |
 | **Phase 4** | Dashboard & User Interface | 🔲 Pending |
 
 ---
 
-## Phase 1 — Computer Vision Foundation
-
-Phase 1 provides the foundational computer vision pipeline:
-
-- **Person detection** using a pretrained YOLOv8 Small model (`yolov8s.pt` by Ultralytics)
-- **Worker tracking** with persistent IDs using tuned ByteTrack
-- **Dual Input Modes:** Pre-recorded video files (`.mp4`, `.avi`, etc.) and **Live Webcam streams**
-- **Annotated video / live display** with bounding boxes, worker IDs, and confidence scores
-- **Structured tracking data** (JSON) for downstream consumption by Phase 2+
-
-### Pipeline
+## Architecture
 
 ```
 Factory Video / Live Webcam
         ↓
-   OpenCV (frame-by-frame reading / webcam capture)
+   OpenCV (frame-by-frame stream / webcam capture)
         ↓
    YOLOv8s Person Detection (COCO Class 0, conf=0.45)
         ↓
@@ -44,13 +35,15 @@ Factory Video / Live Webcam
         ↓
    Persistent Worker IDs
         ↓
+   Worker BBox Crop -> Roboflow Hosted Inference ("helmet-vest-and-boots-detection/8")
+        ↓
+   Worker-Level PPE Cache (refreshed periodically, default: 1.0s)
+        ↓
    ┌──────────────┬──────────────────────────────┐
    │ Annotated    │ Structured Tracking          │
-   │ Video/Stream │ Data (JSON)                  │
+   │ Video/Stream │ Data + PPE (JSON)            │
    └──────────────┴──────────────────────────────┘
 ```
-
-> **Note:** Phase 1 detects and tracks people only. It does **not** perform behaviour analysis, zone detection, or incident generation. Those capabilities are implemented in subsequent phases.
 
 ---
 
@@ -60,7 +53,8 @@ Factory Video / Live Webcam
 |-----------|---------|
 | **Python 3.10+** | Core language |
 | **Ultralytics YOLO** | Person detection (pretrained YOLOv8s) |
-| **ByteTrack** | Multi-object tracking (tuned parameters for factory video & live webcam) |
+| **ByteTrack** | Multi-object tracking (persistent worker IDs across frames) |
+| **Roboflow Hosted Inference** | PPE detection (`helmet-vest-and-boots-detection/8`) via `inference-sdk` |
 | **OpenCV** | Video I/O, webcam capture, live display, and frame annotation |
 | **NumPy** | Numerical and geometric operations |
 
@@ -74,22 +68,24 @@ FactoryGuard-AI/
 ├── app.py                          # Main application entry point
 ├── requirements.txt                # Python dependencies
 ├── README.md                       # Documentation
-├── .gitignore                      # Git ignore rules
+├── .gitignore                      # Git ignore rules (.env, .pt, outputs, data)
+├── .env.example                    # Environment variable template
 │
 ├── detection/
 │   ├── __init__.py                 # Package exports
-│   └── tracker.py                  # Core detection & tracking module (video + webcam)
+│   ├── tracker.py                  # Detection & ByteTrack tracking pipeline
+│   └── ppe_detector.py             # Roboflow PPE detection & worker-level caching
 │
 ├── data/
 │   └── tracking/
-│       ├── tracking_data.json      # [Generated] Pre-recorded video tracking output
-│       └── webcam_tracking_data.json # [Generated] Live webcam tracking output
+│       ├── tracking_data.json      # [Generated] Pre-recorded video tracking + PPE output
+│       └── webcam_tracking_data.json # [Generated] Live webcam tracking + PPE output
 │
 ├── videos/                         # Place pre-recorded input videos here
 │   └── my_test.mp4
 │
 ├── outputs/
-│   ├── tracked_output.mp4          # [Generated] Annotated video file output
+│   ├── tracked_output.mp4          # [Generated] Annotated video file output with PPE badges
 │   └── webcam_output.mp4           # [Generated] Optional recorded webcam session
 │
 ├── models/
@@ -98,7 +94,8 @@ FactoryGuard-AI/
 │
 └── tests/
     ├── __init__.py
-    ├── test_integration.py         # Phase 1 output contract test
+    ├── test_integration.py         # Output contract & Phase 2 integration test
+    ├── test_ppe.py                 # Roboflow PPE parser, caching & fallback tests
     ├── test_webcam.py              # Webcam stream & schema verification tests
     ├── test_configurations.py      # Diagnostic grid evaluation script
     ├── create_sample_video.py      # Synthetic factory video generator
@@ -107,90 +104,94 @@ FactoryGuard-AI/
 
 ---
 
-## Installation
+## Installation & Setup
+
+### 1. Activate Virtual Environment
 
 ```bash
-# 1. Activate virtual environment
 venv\Scripts\activate
+```
 
-# 2. Install dependencies
+### 2. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
+
+### 3. Configure Roboflow API Key (Optional for PPE Detection)
+
+Copy `.env.example` to `.env` and set your key:
+
+```bash
+copy .env.example .env
+```
+
+Inside `.env`:
+```ini
+ROBOFLOW_API_KEY=your_actual_key_here
+```
+
+> **Note:** If `ROBOFLOW_API_KEY` is not provided, the pipeline continues running smoothly with PPE status set to `"unknown"`.
 
 ---
 
 ## Running the Program
 
-### Mode 1: Video File Tracking
+### Mode 1: Pre-recorded Video File
 
 ```bash
-# Specify video file directly
+# Process factory video with tracking and PPE detection
 python app.py videos/my_test.mp4
 
-# Or using the --source flag
-python app.py --source videos/my_test.mp4
+# Configure PPE refresh interval (e.g., sample PPE every 1.5 seconds per worker)
+python app.py videos/my_test.mp4 --ppe-interval 1.5
 
-# Auto-detects first video in videos/ directory
-python app.py
+# Disable PPE detection (tracking only)
+python app.py videos/my_test.mp4 --disable-ppe
 ```
 
-### Mode 2: Live Webcam Tracking
+### Mode 2: Live Webcam Stream
 
 ```bash
-# Start live webcam tracking (default laptop/USB camera 0)
+# Start live webcam tracking (default camera 0)
 python app.py --source webcam
 
 # Shortcut flag
 python app.py --webcam
 
-# Specify a specific camera index (e.g., external USB camera 1)
-python app.py --source webcam --camera-id 1
-
-# Optional: Record the live webcam session to an MP4 video
+# Record live webcam session to MP4
 python app.py --source webcam --record-webcam
 ```
 
-> **Live Controls:** When the live webcam window is active, press **`q`** or **`ESC`** at any time to stop tracking and automatically save `data/tracking/webcam_tracking_data.json`.
-
-### All Command-Line Arguments
-
-| Argument | Default | Description |
-|----------|---------|-------------|
-| `video` | Auto-detect | Path to input video file |
-| `--source` | `None` | Input source: `'webcam'` (or `'0'`) or path to video file |
-| `--webcam` | `False` | Shortcut to launch live webcam tracking |
-| `--camera-id` | `0` | Camera device index for webcam mode |
-| `--record-webcam` | `False` | Record annotated live webcam session to MP4 |
-| `--no-preview` | `False` | Headless mode (disables OpenCV GUI window) |
-| `--model` | `yolov8s.pt` | YOLO model path or name |
-| `--confidence` | `0.45` | Minimum detection confidence (0.0–1.0) |
-| `--tracker-config` | `models/trackers/bytetrack_factoryguard.yaml` | ByteTrack tracker config |
-| `--output-video` | `outputs/tracked_output.mp4` | Custom output video path |
-| `--output-tracking` | `data/tracking/tracking_data.json` | Custom tracking JSON path |
-| `--verbose` / `-v` | `False` | Enable debug logging |
+> **Live Controls:** Press **`q`** or **`ESC`** in the preview window to stop tracking and save results.
 
 ---
 
-## Tracking Data Schema
+## Tracking & PPE Data Schema
 
-Both video-file mode (`tracking_data.json`) and webcam mode (`webcam_tracking_data.json`) output the **exact same structured schema**:
+Output file: `data/tracking/tracking_data.json`
 
 ```json
 {
-  "video": "webcam_0",
+  "video": "my_test.mp4",
   "fps": 30.0,
-  "total_frames": 150,
-  "resolution": [640, 480],
+  "total_frames": 857,
+  "resolution": [1280, 714],
   "frames": [
     {
-      "frame": 0,
-      "timestamp": 0.033,
+      "frame": 52,
+      "timestamp": 1.7333,
       "workers": [
         {
           "id": 1,
-          "bbox": [120.0, 80.5, 260.3, 400.1],
-          "center": [190.2, 240.3],
-          "confidence": 0.8842
+          "bbox": [928.9, 0.0, 963.3, 53.7],
+          "center": [946.1, 26.9],
+          "confidence": 0.5936,
+          "ppe": {
+            "helmet": true,
+            "vest": true,
+            "boots": "unknown"
+          }
         }
       ]
     }
@@ -198,51 +199,44 @@ Both video-file mode (`tracking_data.json`) and webcam mode (`webcam_tracking_da
 }
 ```
 
-- **`bbox` format:** `[x1, y1, x2, y2]` (top-left to bottom-right in pixels)
-- **`center` format:** `[cx, cy]`
-- **`timestamp`:** Derived from video FPS or session elapsed time (seconds)
-- **`id`:** Integer persistent track ID assigned by ByteTrack (`-1` if unassigned)
+### PPE Field Contract
+
+| PPE Item | Value | Meaning |
+|---|---|---|
+| `helmet` | `true` | Hard hat confirmed detected |
+| | `false` | Missing helmet confirmed detected ('no helmet') |
+| | `"unknown"` | Indeterminate or low confidence |
+| `vest` | `true` / `false` / `"unknown"` | Safety vest compliance status |
+| `boots` | `true` / `false` / `"unknown"` | Safety boots compliance status |
 
 ---
 
-## Programmatic API
+## PPE Detection Architecture & Optimizations
 
-```python
-from detection.tracker import process_video, process_webcam, get_tracking_data
-
-# 1. Process video file
-video_data = process_video("videos/my_test.mp4")
-
-# 2. Process live webcam stream
-webcam_data = process_webcam(camera_index=0, show_preview=True)
-
-# 3. Load previously saved data (Phase 2 consumption)
-data = get_tracking_data("data/tracking/webcam_tracking_data.json")
-```
+1. **Worker Bounding Box Cropping:** Only cropped worker regions are sent to Roboflow inference. Full-resolution frames are never transmitted unnecessarily.
+2. **Worker-Level Caching:** PPE predictions are associated with persistent ByteTrack worker IDs.
+3. **Temporal Sampling:** PPE inference is executed at a configurable sampling interval (`--ppe-interval`, default: `1.0s` per worker). Between intervals, cached results are reused, reducing API calls by ~97% at 30 FPS.
+4. **Fault Tolerance:** If network latency, rate limits, or API outages occur, the detector logs a concise warning and falls back to `"unknown"`, ensuring uninterrupted video tracking.
 
 ---
 
 ## Running Automated Tests
 
 ```bash
-# Test contract validation & Phase 2 consumption demo
-python tests/test_integration.py
+# 1. Run PPE unit, caching & failure tests
+python -m unittest tests/test_ppe.py
 
-# Test webcam integration & schema validation
+# 2. Run Webcam integration tests
 python -m unittest tests/test_webcam.py
+
+# 3. Run Output contract & Phase 2 consumption tests
+python tests/test_integration.py
 ```
 
 ---
 
 ## Pretrained Models & Attribution
 
-- **Detection:** Ultralytics YOLOv8s (pretrained on COCO dataset). *Not trained by our team.*
-- **Tracking:** ByteTrack algorithm via Ultralytics API with custom factory monitoring parameters.
-
----
-
-## Limitations
-
-- **Webcam Framerate:** Real-time processing speed depends on CPU/GPU hardware.
-- **Lighting Conditions:** Poor or low-light factory webcam streams may reduce detection recall.
-- **Prolonged Occlusions (>3s):** If a worker leaves camera field of view for >3 seconds, a new track ID may be assigned upon return.
+- **Person Detection:** Ultralytics YOLOv8s (pretrained on COCO dataset).
+- **Tracking:** ByteTrack algorithm via Ultralytics API.
+- **PPE Classification:** Roboflow Hosted Inference Model `helmet-vest-and-boots-detection/8`.

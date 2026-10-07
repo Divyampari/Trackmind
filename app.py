@@ -1,23 +1,26 @@
 ﻿"""
 FactoryGuard AI - Main Application Entry Point
 
-Phase 1: Computer Vision Foundation
+Phase 1 & Phase 2 Integration Layer: Computer Vision Foundation & PPE Detection
 
 Processes factory video footage or live webcam streams to detect and track
-workers using YOLOv8 + tuned ByteTrack. Produces an annotated output video
-and structured tracking data (JSON) for downstream phases.
+workers using YOLOv8 + tuned ByteTrack, and monitors PPE compliance (Helmet,
+Vest, Boots) using Roboflow hosted inference with interval caching.
 
 Usage:
     # 1. Video File Input:
-    python app.py                                        # Uses default/detected video
-    python app.py videos/my_test.mp4                     # Specify video path
+    python app.py                                        # Auto-detects video in videos/
+    python app.py videos/my_test.mp4                     # Explicit video path
     python app.py --source videos/my_test.mp4            # Using --source flag
 
     # 2. Live Webcam Input:
     python app.py --source webcam                        # Default laptop/USB webcam
     python app.py --webcam                               # Shortcut flag for webcam
-    python app.py --source webcam --camera-id 0          # Explicit camera index
     python app.py --source webcam --record-webcam        # Record webcam output to mp4
+
+    # 3. PPE Configuration Options:
+    python app.py videos/my_test.mp4 --ppe-interval 1.5  # Sample PPE every 1.5s
+    python app.py videos/my_test.mp4 --disable-ppe       # Disable PPE detection
 """
 
 import argparse
@@ -39,14 +42,17 @@ from detection.tracker import (
     DEFAULT_WEBCAM_TRACKING_FILE,
     DEFAULT_WEBCAM_OUTPUT_VIDEO,
 )
+from detection.ppe_detector import (
+    DEFAULT_PPE_INTERVAL_SECONDS,
+    load_env_file,
+)
+
+# Ensure local .env file is loaded into os.environ
+load_env_file()
 
 
 def setup_logging(verbose: bool = False) -> None:
-    """Configure application logging.
-
-    Args:
-        verbose: If True, set DEBUG level. Otherwise INFO.
-    """
+    """Configure application logging."""
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
@@ -60,8 +66,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="FactoryGuard AI",
         description=(
-            "Phase 1: Detect and track workers in factory video footage or live webcam. "
-            "Produces annotated video and structured tracking data."
+            "Detect and track workers in factory video footage or live webcam, "
+            "and inspect PPE compliance (Helmet, Vest, Boots)."
         ),
     )
     # Positional or named source
@@ -113,6 +119,23 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_TRACKER_CFG,
         help=f"Custom ByteTrack tracker YAML configuration (default: {DEFAULT_TRACKER_CFG}).",
     )
+    # PPE Options
+    parser.add_argument(
+        "--disable-ppe",
+        action="store_true",
+        help="Disable Roboflow PPE detection (defaults to tracking only).",
+    )
+    parser.add_argument(
+        "--ppe-interval",
+        type=float,
+        default=DEFAULT_PPE_INTERVAL_SECONDS,
+        help=f"Interval in seconds between PPE inference calls per worker (default: {DEFAULT_PPE_INTERVAL_SECONDS}s).",
+    )
+    parser.add_argument(
+        "--roboflow-api-key",
+        default=None,
+        help="Roboflow API key (defaults to ROBOFLOW_API_KEY environment variable or .env file).",
+    )
     parser.add_argument(
         "--output-video",
         default=None,
@@ -132,14 +155,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def find_default_video() -> str:
-    """Attempt to find a video file in the videos/ directory.
-
-    Returns:
-        Path to the first video file found.
-
-    Raises:
-        FileNotFoundError: If no video files are found.
-    """
+    """Attempt to find a video file in the videos/ directory."""
     videos_dir = "videos"
     video_extensions = {".mp4", ".avi", ".mkv", ".mov", ".wmv", ".flv"}
 
@@ -186,7 +202,6 @@ def main() -> None:
             is_webcam = True
             camera_id = int(source_str)
         else:
-            # Source is a video file path
             video_path = args.source
     elif args.video is not None:
         if args.video.strip().lower() in ("webcam", "camera", "cam"):
@@ -194,22 +209,24 @@ def main() -> None:
         else:
             video_path = args.video
     else:
-        # Default fallback: check for video file
         try:
             video_path = find_default_video()
         except FileNotFoundError:
-            # If no video is found, prompt help
             print("\nNo video file found in 'videos/' and no --source specified.")
             print("To run webcam mode:   python app.py --source webcam")
             print("To run video file:    python app.py videos/my_test.mp4\n")
             sys.exit(1)
 
+    enable_ppe = not args.disable_ppe
+    has_api_key = bool(args.roboflow_api_key or os.environ.get("ROBOFLOW_API_KEY", "").strip())
+    ppe_status_label = "Enabled (Roboflow)" if (enable_ppe and has_api_key) else ("Enabled (Fallback unknown / No API key configured)" if enable_ppe else "Disabled")
+
     # --- Banner ---
     print()
     print("=" * 60)
-    print("  FactoryGuard AI - Phase 1: Computer Vision Foundation")
+    print("  FactoryGuard AI - Safety Monitoring Pipeline")
     mode_label = "Live Webcam Stream" if is_webcam else "Pre-recorded Video"
-    print(f"  Worker Detection & Tracking Pipeline [{mode_label}]")
+    print(f"  Worker Tracking & PPE Understanding [{mode_label}]")
     print("=" * 60)
     print()
 
@@ -231,6 +248,9 @@ def main() -> None:
         print(f"  YOLO Model     : {args.model}")
         print(f"  Confidence     : {args.confidence}")
         print(f"  Tracker Config : {args.tracker_config}")
+        print(f"  PPE Detection  : {ppe_status_label}")
+        if enable_ppe:
+            print(f"  PPE Interval   : {args.ppe_interval}s per worker")
         print(f"  Recording      : {video_out or 'Disabled (use --record-webcam to enable)'}")
         print(f"  Tracking Data  : {tracking_out}")
         print(f"  Live Preview   : {'Disabled' if args.no_preview else 'Enabled (Press q to stop)'}")
@@ -242,6 +262,9 @@ def main() -> None:
                 model_path=args.model,
                 confidence=args.confidence,
                 tracker_config=args.tracker_config,
+                enable_ppe=enable_ppe,
+                ppe_interval=args.ppe_interval,
+                roboflow_api_key=args.roboflow_api_key,
                 output_video_path=video_out,
                 tracking_output_path=tracking_out,
                 show_preview=not args.no_preview,
@@ -270,6 +293,9 @@ def main() -> None:
         print(f"  YOLO Model     : {args.model}")
         print(f"  Confidence     : {args.confidence}")
         print(f"  Tracker Config : {args.tracker_config}")
+        print(f"  PPE Detection  : {ppe_status_label}")
+        if enable_ppe:
+            print(f"  PPE Interval   : {args.ppe_interval}s per worker")
         print(f"  Output Video   : {video_out}")
         print(f"  Tracking Data  : {tracking_out}")
         print()
@@ -280,6 +306,9 @@ def main() -> None:
                 model_path=args.model,
                 confidence=args.confidence,
                 tracker_config=args.tracker_config,
+                enable_ppe=enable_ppe,
+                ppe_interval=args.ppe_interval,
+                roboflow_api_key=args.roboflow_api_key,
                 output_video_path=video_out,
                 tracking_output_path=tracking_out,
             )

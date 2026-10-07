@@ -1,0 +1,9 @@
+﻿# FactoryGuard AI Dependencies
+# Computer Vision Foundation & PPE Detection
+
+ultralytics>=8.0.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+lap>=0.5.12
+PyYAML>=6.0
+inference-sdk>=0.1.0
