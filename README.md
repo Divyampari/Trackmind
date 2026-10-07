@@ -368,7 +368,7 @@ The overall system will follow:
 
 The long-term objective is to transform raw factory video into meaningful, explainable safety information by identifying **who** is involved, **where** they are, **what** they are doing, **when** it happened, **how long** it continued, and **why** it should be considered a safety concern.User can modify the default warning and restricted zones by selecting the vertices manually.(Screenshot-6 attached)
 
-```
+
 
 <img width="1600" height="754" alt="img1" src="https://github.com/user-attachments/assets/cbfb8541-85de-43e9-99f6-d3cb85ffec6b" />
 <img width="749" height="506" alt="img2" src="https://github.com/user-attachments/assets/c78b8ed1-aa75-404c-9fa9-7698d39500e9" />
@@ -378,4 +378,4 @@ The long-term objective is to transform raw factory video into meaningful, expla
 <img width="1411" height="380" alt="img6" src="https://github.com/user-attachments/assets/2319bbcb-e756-487b-9b26-f2c78f71e4b4" />
 <img width="1600" height="618" alt="image" src="https://github.com/user-attachments/assets/ec1b9f11-101e-4ecc-bef6-a45ac5094636" />
 
-```
+
