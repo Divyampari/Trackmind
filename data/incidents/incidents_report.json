@@ -1,0 +1,339 @@
+{
+  "source_info": {
+    "video_name": "my_test1.mp4",
+    "video_path": "videos/my_test1.mp4",
+    "resolution": [
+      1912,
+      826
+    ],
+    "fps": 30.0,
+    "processed_frames": 272,
+    "processed_at": "2026-10-07T16:18:02.176035"
+  },
+  "total_incidents": 7,
+  "severity_summary": {
+    "CRITICAL": 0,
+    "HIGH": 5,
+    "WARNING": 2
+  },
+  "severity_breakdown": {
+    "CRITICAL": 0,
+    "HIGH": 5,
+    "WARNING": 2
+  },
+  "zone_summary": {
+    "Machine Zone A": 5,
+    "Chemical Storage & Corridor": 2
+  },
+  "zone_breakdown": {
+    "Machine Zone A": 5,
+    "Chemical Storage & Corridor": 2
+  },
+  "worker_summary": {
+    "Worker_2": 1,
+    "Worker_5": 1,
+    "Worker_6": 1,
+    "Worker_8": 1,
+    "Worker_9": 1,
+    "Worker_10": 1,
+    "Worker_11": 1
+  },
+  "worker_breakdown": {
+    "Worker_2": 1,
+    "Worker_5": 1,
+    "Worker_6": 1,
+    "Worker_8": 1,
+    "Worker_9": 1,
+    "Worker_10": 1,
+    "Worker_11": 1
+  },
+  "incidents": [
+    {
+      "incident_id": "INC-0001",
+      "worker_id": 2,
+      "event_type": "restricted_zone_entry",
+      "event": "restricted_zone_entry",
+      "timestamp": 0.167,
+      "frame_number": 5,
+      "frame": 5,
+      "zone": "Machine Zone A",
+      "zone_type": "restricted",
+      "severity": "high",
+      "severity_upper": "HIGH",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": null,
+      "evidence_frame": "data/incidents/evidence/INC-0001.jpg",
+      "evidence": "data/incidents/evidence/INC-0001.jpg",
+      "status": "OPEN",
+      "description": "Worker 2 entered RESTRICTED zone 'Machine Zone A'.",
+      "ppe": {
+        "helmet": null,
+        "vest": null,
+        "boots": null
+      },
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "worker_bbox": [
+        734.5,
+        369.6,
+        764.8,
+        433.5
+      ],
+      "worker_center": [
+        749.7,
+        401.5
+      ]
+    },
+    {
+      "incident_id": "INC-0002",
+      "worker_id": 5,
+      "event_type": "restricted_zone_entry",
+      "event": "restricted_zone_entry",
+      "timestamp": 1.8,
+      "frame_number": 54,
+      "frame": 54,
+      "zone": "Machine Zone A",
+      "zone_type": "restricted",
+      "severity": "high",
+      "severity_upper": "HIGH",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": null,
+      "evidence_frame": "data/incidents/evidence/INC-0002.jpg",
+      "evidence": "data/incidents/evidence/INC-0002.jpg",
+      "status": "OPEN",
+      "description": "Worker 5 entered RESTRICTED zone 'Machine Zone A'.",
+      "ppe": {
+        "helmet": null,
+        "vest": null,
+        "boots": null
+      },
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "worker_bbox": [
+        44.5,
+        1.9,
+        1602.4,
+        810.1
+      ],
+      "worker_center": [
+        823.4,
+        406.0
+      ]
+    },
+    {
+      "incident_id": "INC-0003",
+      "worker_id": 6,
+      "event_type": "warning_zone_entry",
+      "event": "warning_zone_entry",
+      "timestamp": 1.9,
+      "frame_number": 57,
+      "frame": 57,
+      "zone": "Chemical Storage & Corridor",
+      "zone_type": "warning",
+      "severity": "warning",
+      "severity_upper": "WARNING",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": null,
+      "evidence_frame": "data/incidents/evidence/INC-0003.jpg",
+      "evidence": "data/incidents/evidence/INC-0003.jpg",
+      "status": "OPEN",
+      "description": "Worker 6 entered WARNING zone 'Chemical Storage & Corridor'.",
+      "ppe": {
+        "helmet": null,
+        "vest": null,
+        "boots": null
+      },
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "worker_bbox": [
+        661.6,
+        504.8,
+        1560.9,
+        813.5
+      ],
+      "worker_center": [
+        1111.3,
+        659.2
+      ]
+    },
+    {
+      "incident_id": "INC-0004",
+      "worker_id": 8,
+      "event_type": "warning_zone_entry",
+      "event": "warning_zone_entry",
+      "timestamp": 4.7,
+      "frame_number": 141,
+      "frame": 141,
+      "zone": "Chemical Storage & Corridor",
+      "zone_type": "warning",
+      "severity": "warning",
+      "severity_upper": "WARNING",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": null,
+      "evidence_frame": "data/incidents/evidence/INC-0004.jpg",
+      "evidence": "data/incidents/evidence/INC-0004.jpg",
+      "status": "OPEN",
+      "description": "Worker 8 entered WARNING zone 'Chemical Storage & Corridor'.",
+      "ppe": {
+        "helmet": null,
+        "vest": null,
+        "boots": null
+      },
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "worker_bbox": [
+        1412.0,
+        267.8,
+        1749.0,
+        589.3
+      ],
+      "worker_center": [
+        1580.5,
+        428.5
+      ]
+    },
+    {
+      "incident_id": "INC-0005",
+      "worker_id": 9,
+      "event_type": "restricted_zone_entry",
+      "event": "restricted_zone_entry",
+      "timestamp": 4.7,
+      "frame_number": 141,
+      "frame": 141,
+      "zone": "Machine Zone A",
+      "zone_type": "restricted",
+      "severity": "high",
+      "severity_upper": "HIGH",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": null,
+      "evidence_frame": "data/incidents/evidence/INC-0005.jpg",
+      "evidence": "data/incidents/evidence/INC-0005.jpg",
+      "status": "OPEN",
+      "description": "Worker 9 entered RESTRICTED zone 'Machine Zone A'.",
+      "ppe": {
+        "helmet": null,
+        "vest": null,
+        "boots": null
+      },
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "worker_bbox": [
+        685.9,
+        177.7,
+        850.4,
+        607.2
+      ],
+      "worker_center": [
+        768.1,
+        392.4
+      ]
+    },
+    {
+      "incident_id": "INC-0006",
+      "worker_id": 10,
+      "event_type": "restricted_zone_entry",
+      "event": "restricted_zone_entry",
+      "timestamp": 4.7,
+      "frame_number": 141,
+      "frame": 141,
+      "zone": "Machine Zone A",
+      "zone_type": "restricted",
+      "severity": "high",
+      "severity_upper": "HIGH",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": null,
+      "evidence_frame": "data/incidents/evidence/INC-0006.jpg",
+      "evidence": "data/incidents/evidence/INC-0006.jpg",
+      "status": "OPEN",
+      "description": "Worker 10 entered RESTRICTED zone 'Machine Zone A'.",
+      "ppe": {
+        "helmet": null,
+        "vest": null,
+        "boots": null
+      },
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "worker_bbox": [
+        299.7,
+        154.5,
+        515.6,
+        820.5
+      ],
+      "worker_center": [
+        407.6,
+        487.5
+      ]
+    },
+    {
+      "incident_id": "INC-0007",
+      "worker_id": 11,
+      "event_type": "restricted_zone_entry",
+      "event": "restricted_zone_entry",
+      "timestamp": 6.967,
+      "frame_number": 209,
+      "frame": 209,
+      "zone": "Machine Zone A",
+      "zone_type": "restricted",
+      "severity": "high",
+      "severity_upper": "HIGH",
+      "duration": 0.0,
+      "dwell_time": 0.0,
+      "source": "video",
+      "video_path": null,
+      "evidence_frame": "data/incidents/evidence/INC-0007.jpg",
+      "evidence": "data/incidents/evidence/INC-0007.jpg",
+      "status": "OPEN",
+      "description": "Worker 11 entered RESTRICTED zone 'Machine Zone A'.",
+      "ppe": {
+        "helmet": null,
+        "vest": null,
+        "boots": null
+      },
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "worker_bbox": [
+        255.8,
+        199.9,
+        364.0,
+        507.4
+      ],
+      "worker_center": [
+        309.9,
+        353.7
+      ]
+    }
+  ]
+}

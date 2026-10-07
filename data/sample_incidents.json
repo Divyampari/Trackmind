@@ -1,0 +1,126 @@
+[
+  {
+    "incident_id": "INC-001",
+    "worker_id": 3,
+    "event_type": "Restricted Zone Entry",
+    "zone": "Machine A",
+    "timestamp": "00:02:41",
+    "duration": 8.4,
+    "severity": "CRITICAL",
+    "evidence": "evidence/incident_001.jpg",
+    "source": "Webcam",
+    "ppe": {
+      "helmet": "NO",
+      "vest": "YES",
+      "boots": "UNKNOWN"
+    }
+  },
+  {
+    "incident_id": "INC-002",
+    "worker_id": 1,
+    "event_type": "Prolonged Presence",
+    "zone": "Robotic Zone B",
+    "timestamp": "00:05:12",
+    "duration": 22.5,
+    "severity": "WARNING",
+    "evidence": "evidence/incident_002.jpg",
+    "source": "Uploaded Video",
+    "ppe": {
+      "helmet": "YES",
+      "vest": "YES",
+      "boots": "YES"
+    }
+  },
+  {
+    "incident_id": "INC-003",
+    "worker_id": 7,
+    "event_type": "Restricted Zone Entry",
+    "zone": "High Voltage Zone C",
+    "timestamp": "00:08:50",
+    "duration": 14.1,
+    "severity": "CRITICAL",
+    "evidence": "evidence/incident_003.jpg",
+    "source": "Webcam",
+    "ppe": {
+      "helmet": "NO",
+      "vest": "NO",
+      "boots": "UNKNOWN"
+    }
+  },
+  {
+    "incident_id": "INC-004",
+    "worker_id": 2,
+    "event_type": "PPE Violation - No Helmet",
+    "zone": "Machine A",
+    "timestamp": "00:11:05",
+    "duration": 35.0,
+    "severity": "WARNING",
+    "evidence": "evidence/incident_004.jpg",
+    "source": "Uploaded Video",
+    "ppe": {
+      "helmet": "NO",
+      "vest": "YES",
+      "boots": "YES"
+    }
+  },
+  {
+    "incident_id": "INC-005",
+    "worker_id": 5,
+    "event_type": "Prolonged Presence",
+    "zone": "Chemical Bay E",
+    "timestamp": "00:15:30",
+    "duration": 48.2,
+    "severity": "CRITICAL",
+    "evidence": "evidence/incident_005.jpg",
+    "source": "Webcam",
+    "ppe": null
+  },
+  {
+    "incident_id": "INC-006",
+    "worker_id": 3,
+    "event_type": "Restricted Zone Entry",
+    "zone": "Packaging Machine D",
+    "timestamp": "00:18:14",
+    "duration": 6.8,
+    "severity": "WARNING",
+    "evidence": "evidence/incident_006.jpg",
+    "source": "Uploaded Video",
+    "ppe": {
+      "helmet": "YES",
+      "vest": "NO",
+      "boots": "UNKNOWN"
+    }
+  },
+  {
+    "incident_id": "INC-007",
+    "worker_id": 10,
+    "event_type": "Unauthorized Access",
+    "zone": "High Voltage Zone C",
+    "timestamp": "00:21:40",
+    "duration": 11.3,
+    "severity": "CRITICAL",
+    "evidence": "evidence/incident_007.jpg",
+    "source": "Webcam",
+    "ppe": {
+      "helmet": "NO",
+      "vest": "YES",
+      "boots": "NO"
+    }
+  },
+  {
+    "incident_id": "INC-008",
+    "worker_id": 2,
+    "event_type": "Prolonged Presence",
+    "zone": "Robotic Zone B",
+    "timestamp": "00:25:02",
+    "duration": 18.7,
+    "severity": "WARNING",
+    "evidence": "evidence/incident_008.jpg",
+    "source": "Uploaded Video",
+    "ppe": {
+      "helmet": "YES",
+      "vest": "YES",
+      "boots": "UNKNOWN"
+    }
+  }
+]

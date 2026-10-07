@@ -1,0 +1,57 @@
+{
+  "video_name": "my_test1.mp4",
+  "resolution": [
+    1280,
+    720
+  ],
+  "zones": [
+    {
+      "name": "Machine Zone A",
+      "type": "restricted",
+      "polygon": [
+        [
+          192.0,
+          180.0
+        ],
+        [
+          576.0,
+          180.0
+        ],
+        [
+          576.0,
+          503.0
+        ],
+        [
+          192.0,
+          503.0
+        ]
+      ],
+      "dwell_threshold": 5.0,
+      "description": "Hazardous robotics assembly cell"
+    },
+    {
+      "name": "Chemical Storage & Corridor",
+      "type": "warning",
+      "polygon": [
+        [
+          704.0,
+          216.0
+        ],
+        [
+          1088.0,
+          216.0
+        ],
+        [
+          1088.0,
+          576.0
+        ],
+        [
+          704.0,
+          576.0
+        ]
+      ],
+      "dwell_threshold": 10.0,
+      "description": "Forklift and material transit warning zone"
+    }
+  ]
+}
