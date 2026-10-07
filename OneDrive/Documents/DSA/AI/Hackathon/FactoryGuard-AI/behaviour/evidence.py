@@ -117,22 +117,28 @@ class EvidenceManager:
             cv2.rectangle(annotated, (x1, lbl_y - th - 6), (x1 + tw + 10, lbl_y + bl), box_color, -1)
             cv2.putText(annotated, badge_text, (x1 + 5, lbl_y - 2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
 
-        # 3. Top Banner Overlay
-        banner_h = 55
+        # 3. Top Banner & Watermark Card Overlay
+        banner_h = 60
         cv2.rectangle(annotated, (0, 0), (w, banner_h), (20, 20, 20), -1)
 
         severity_color = (0, 0, 255) if severity in ("HIGH", "CRITICAL") else (0, 255, 255)
         # Left severity pill
-        cv2.rectangle(annotated, (10, 10), (140, 45), severity_color, -1)
-        cv2.putText(annotated, severity, (20, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+        cv2.rectangle(annotated, (10, 10), (140, 48), severity_color, -1)
+        cv2.putText(annotated, severity, (20, 37), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
 
-        # Right metadata text
-        header_text = f"[{incident_id}] Worker {worker_id} - {event} | Zone: {zone_name} | t={timestamp:.2f}s"
-        cv2.putText(annotated, header_text, (155, 33), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+        # Right metadata header text
+        mins = int(timestamp // 60)
+        secs = timestamp % 60
+        ts_formatted = f"{mins:02d}:{secs:04.1f}"
+        header_text = f"[{incident_id}] Worker {worker_id} - {event} | Zone: {zone_name} | {ts_formatted} (Frame {frame_number})"
+        cv2.putText(annotated, header_text, (155, 36), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 2)
 
-        # 4. Save Evidence Snapshot
-        filename = f"{incident_id}_w{worker_id}_frame{frame_number}.jpg"
-        filepath = os.path.join(self.output_dir, filename)
+        # 4. Save Evidence Snapshot directly named after incident_id
+        clean_inc_id = incident_id if incident_id.lower().endswith(".jpg") else f"{incident_id}.jpg"
+        filepath = os.path.join(self.output_dir, clean_inc_id)
+
+        # Ensure directory exists
+        os.makedirs(self.output_dir, exist_ok=True)
 
         success = cv2.imwrite(filepath, annotated)
         if success:

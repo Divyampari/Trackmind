@@ -16,7 +16,7 @@ Safety Reasoning Rules:
 
 import os
 import logging
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 import numpy as np
 
 from behaviour.zone_manager import Zone, ZoneType
@@ -28,6 +28,14 @@ from behaviour.evidence import EvidenceManager
 logger = logging.getLogger("factoryguard.behaviour.behaviour_analyzer")
 
 
+DEFAULT_SEVERITY_MAP = {
+    EventType.WARNING_ENTRY.value: Severity.WARNING.value,
+    EventType.WARNING_DWELL.value: Severity.WARNING.value,
+    EventType.RESTRICTED_ENTRY.value: Severity.HIGH.value,
+    EventType.RESTRICTED_DWELL.value: Severity.CRITICAL.value,
+}
+
+
 class BehaviourAnalyzer:
     """Core safety intelligence engine evaluating spatial events and generating incidents.
 
@@ -35,6 +43,7 @@ class BehaviourAnalyzer:
         incident_manager: IncidentManager instance.
         evidence_manager: EvidenceManager instance.
         ppe_interface: PPEInterface instance.
+        severity_map: Optional dictionary mapping event types to Severity values.
     """
 
     def __init__(
@@ -42,10 +51,14 @@ class BehaviourAnalyzer:
         incident_manager: Optional[IncidentManager] = None,
         evidence_manager: Optional[EvidenceManager] = None,
         ppe_interface: Optional[PPEInterface] = None,
+        severity_map: Optional[Dict[str, str]] = None,
     ):
         self.incident_manager = incident_manager or IncidentManager()
         self.evidence_manager = evidence_manager or EvidenceManager()
         self.ppe_interface = ppe_interface or PPEInterface()
+        self.severity_map = dict(DEFAULT_SEVERITY_MAP)
+        if severity_map:
+            self.severity_map.update(severity_map)
 
     def process_frame_events(
         self,
@@ -72,86 +85,86 @@ class BehaviourAnalyzer:
             )
             ppe_dict = ppe_state.to_dict()
 
-            # Rule evaluation
-            severity = Severity.WARNING.value
+            # Check if this event warrants an incident
+            if event.event_type not in self.severity_map:
+                # Exit events or unmapped events do not create alert incidents
+                continue
+
+            # Determine base severity from rule map
+            severity = self.severity_map.get(event.event_type, Severity.WARNING.value)
             description = ""
-            should_create_incident = True
 
             if event.event_type == EventType.RESTRICTED_ENTRY.value:
-                severity = Severity.HIGH.value
                 description = f"Worker {event.worker_id} entered RESTRICTED zone '{event.zone_name}'."
                 if ppe_state.helmet is False or ppe_state.vest is False:
                     severity = Severity.CRITICAL.value
                     description += " (PPE VIOLATION DETECTED)"
 
             elif event.event_type == EventType.RESTRICTED_DWELL.value:
-                severity = Severity.CRITICAL.value
                 description = (
                     f"Worker {event.worker_id} PROLONGED RESTRICTED PRESENCE "
                     f"({event.dwell_time:.1f}s) in zone '{event.zone_name}'."
                 )
 
             elif event.event_type == EventType.WARNING_ENTRY.value:
-                severity = Severity.WARNING.value
                 description = f"Worker {event.worker_id} entered WARNING zone '{event.zone_name}'."
 
             elif event.event_type == EventType.WARNING_DWELL.value:
-                severity = Severity.WARNING.value
                 description = (
                     f"Worker {event.worker_id} sustained presence ({event.dwell_time:.1f}s) "
                     f"in warning zone '{event.zone_name}'."
                 )
 
-            else:
-                # Entry/Exit events that do not warrant alert incidents
-                should_create_incident = False
+            # Check deduplication BEFORE creating incident or capturing evidence
+            if self.incident_manager.is_duplicate(
+                event.worker_id, event.event_type, event.zone_name, event.timestamp
+            ):
+                logger.debug(
+                    "Skipping duplicate incident/evidence for Worker %d (%s in '%s') at t=%.2fs",
+                    event.worker_id, event.event_type, event.zone_name, event.timestamp
+                )
+                continue
 
-            if should_create_incident:
-                # Capture visual evidence snapshot
-                evidence_path = ""
-                if frame is not None:
-                    # Temporary incident ID placeholder
-                    temp_inc_id = f"INC-TEMP-{event.worker_id}"
-                    evidence_path = self.evidence_manager.capture_evidence(
-                        frame=frame,
-                        incident_id=temp_inc_id,
-                        worker_id=event.worker_id,
-                        event=event.event_type,
-                        timestamp=event.timestamp,
-                        frame_number=event.frame,
-                        zone_name=event.zone_name,
-                        severity=severity,
-                        worker_bbox=event.worker_bbox,
-                        zones=zones,
-                        description=description,
-                    )
+            # Get target incident ID for direct evidence saving
+            next_inc_id = self.incident_manager.peek_next_id()
 
-                # Register incident (handles deduplication cooldowns)
-                incident = self.incident_manager.create_incident(
+            # Capture visual evidence snapshot if frame is available
+            evidence_path = ""
+            if frame is not None:
+                evidence_path = self.evidence_manager.capture_evidence(
+                    frame=frame,
+                    incident_id=next_inc_id,
                     worker_id=event.worker_id,
                     event=event.event_type,
                     timestamp=event.timestamp,
-                    frame=event.frame,
-                    zone=event.zone_name,
+                    frame_number=event.frame,
+                    zone_name=event.zone_name,
                     severity=severity,
-                    description=description,
-                    dwell_time=event.dwell_time,
-                    ppe_status=ppe_dict,
                     worker_bbox=event.worker_bbox,
-                    worker_center=event.worker_center,
-                    evidence_frame_path=evidence_path,
+                    zones=zones,
+                    description=description,
                 )
 
-                if incident:
-                    # Rename evidence snapshot with final incident_id if captured
-                    if evidence_path and os.path.isfile(evidence_path):
-                        final_path = evidence_path.replace("INC-TEMP-", f"{incident.incident_id}_")
-                        try:
-                            os.replace(evidence_path, final_path)
-                            incident.evidence_frame_path = final_path
-                        except Exception as e:
-                            logger.warning("Could not rename evidence snapshot: %s", e)
+            # Register incident with IncidentManager
+            incident = self.incident_manager.create_incident(
+                worker_id=event.worker_id,
+                event=event.event_type,
+                timestamp=event.timestamp,
+                frame=event.frame,
+                zone=event.zone_name,
+                severity=severity,
+                description=description,
+                dwell_time=event.dwell_time,
+                ppe_status=ppe_dict,
+                worker_bbox=event.worker_bbox,
+                worker_center=event.worker_center,
+                zone_type=event.zone_type,
+                status="OPEN",
+                evidence_frame_path=evidence_path,
+                custom_incident_id=next_inc_id,
+            )
 
-                    created_incidents.append(incident)
+            if incident:
+                created_incidents.append(incident)
 
         return created_incidents

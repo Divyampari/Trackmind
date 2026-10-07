@@ -1,4 +1,4 @@
-﻿"""
+"""
 Comprehensive configuration evaluator for FactoryGuard AI Phase 1.
 Tests various combinations of:
 - Models: yolov8n.pt vs yolov8s.pt
@@ -7,11 +7,20 @@ Tests various combinations of:
 """
 
 import os
+# pyrefly: ignore [missing-import]
 import cv2
+# pyrefly: ignore [missing-import]
 import numpy as np
-from ultralytics import YOLO
+try:
+    # pyrefly: ignore [missing-import]
+    from ultralytics import YOLO
+except ImportError:
+    YOLO = None
 from collections import defaultdict
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 def create_tracker_configs():
     os.makedirs("models/trackers", exist_ok=True)

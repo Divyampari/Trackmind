@@ -141,6 +141,15 @@ class BehaviourEngine:
         self.zone_manager.video_name = video_name
         self.zone_manager.resolution = resolution
 
+        # Set session source info in incident manager
+        self.incident_manager.set_source_info(
+            source_name=video_name,
+            source_path=video_path or "",
+            resolution=resolution,
+            fps=fps,
+            total_frames=total_frames,
+        )
+
         # Open video source if provided
         cap = None
         writer = None
@@ -167,7 +176,7 @@ class BehaviourEngine:
             self.zone_manager.generate_default_preset_zones((resolution[0], resolution[1]), video_name=video_name)
 
         logger.info(
-            "Starting Phase 2 Behaviour Analysis: '%s' (%d zones configured)",
+            "Starting Phase 2/3 Behaviour Analysis: '%s' (%d zones configured)",
             video_name, len(self.zone_manager.zones)
         )
 
@@ -209,8 +218,35 @@ class BehaviourEngine:
             "total_incidents": len(self.incident_manager.incidents),
             "incidents_report_path": saved_report_path,
             "output_video_path": output_video_path or "",
+            "source_info": self.incident_manager.source_info,
+            "severity_summary": self.incident_manager.get_summary()["severity_summary"],
         }
         return summary
+
+    def get_incidents(self, **kwargs) -> List[SafetyIncident]:
+        """Query recorded incidents."""
+        return self.incident_manager.get_incidents(**kwargs)
+
+    def get_all_incidents(self) -> List[SafetyIncident]:
+        """Get all recorded incidents."""
+        return self.incident_manager.get_all_incidents()
+
+    def get_active_incidents(self) -> List[SafetyIncident]:
+        """Get active incidents matching currently open worker zone states."""
+        active_keys = list(self.zone_detector.active_states.keys())
+        return self.incident_manager.get_active_incidents(active_keys)
+
+    def get_incidents_by_severity(self, severity: str) -> List[SafetyIncident]:
+        """Get incidents by severity level."""
+        return self.incident_manager.get_incidents_by_severity(severity)
+
+    def get_incidents_by_worker(self, worker_id: int) -> List[SafetyIncident]:
+        """Get incidents by worker ID."""
+        return self.incident_manager.get_incidents_by_worker(worker_id)
+
+    def get_incidents_by_zone(self, zone_name: str) -> List[SafetyIncident]:
+        """Get incidents by zone name."""
+        return self.incident_manager.get_incidents_by_zone(zone_name)
 
     def _annotate_frame(
         self,
