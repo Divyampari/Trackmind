@@ -366,7 +366,7 @@ The overall system will follow:
 
 **Detect → Track → Understand → Identify → Prove → Act**
 
-The long-term objective is to transform raw factory video into meaningful, explainable safety information by identifying **who** is involved, **where** they are, **what** they are doing, **when** it happened, **how long** it continued, and **why** it should be considered a safety concern.
+The long-term objective is to transform raw factory video into meaningful, explainable safety information by identifying **who** is involved, **where** they are, **what** they are doing, **when** it happened, **how long** it continued, and **why** it should be considered a safety concern.User can modify the default warning and restricted zones by selecting the vertices manually.(Screenshot-6 attached)
 
 ```
 
@@ -376,6 +376,5 @@ The long-term objective is to transform raw factory video into meaningful, expla
 <img width="338" height="155" alt="img4" src="https://github.com/user-attachments/assets/4c33eb42-d707-424c-930c-1ef31a744506" />
 <img width="1541" height="839" alt="img5" src="https://github.com/user-attachments/assets/be52ecc8-6964-4220-8196-8db7539569e7" />
 <img width="1411" height="380" alt="img6" src="https://github.com/user-attachments/assets/2319bbcb-e756-487b-9b26-f2c78f71e4b4" />
-User can modify the default warning and restricted zones by selecting the vertices manually.
 <img width="1600" height="618" alt="image" src="https://github.com/user-attachments/assets/ec1b9f11-101e-4ecc-bef6-a45ac5094636" />
 
