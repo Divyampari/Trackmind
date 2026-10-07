@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -42,11 +42,20 @@ videos/*.avi
 videos/*.mkv
 videos/*.mov
 
-# Logs
+# Logs & DLLs
 *.log
+*.dll
+
+# Nested temporary repositories
+Trackmind/
+
+# Temporary test media
+test_avc1.mp4
+test_vp8.webm
 
 # Jupyter
 .ipynb_checkpoints/
 
 # Byte-compiled
 *.pyc
+
