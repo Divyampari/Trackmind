@@ -1,11 +1,102 @@
 {
-  "total_incidents": 0,
+  "total_incidents": 3,
   "severity_breakdown": {
-    "WARNING": 0,
-    "HIGH": 0,
+    "WARNING": 2,
+    "HIGH": 1,
     "CRITICAL": 0
   },
-  "event_breakdown": {},
-  "worker_breakdown": {},
-  "incidents": []
+  "event_breakdown": {
+    "warning_zone_entry": 2,
+    "restricted_zone_entry": 1
+  },
+  "worker_breakdown": {
+    "Worker_6": 2,
+    "Worker_10": 1
+  },
+  "incidents": [
+    {
+      "worker_id": 6,
+      "event": "warning_zone_entry",
+      "timestamp": 5.93,
+      "zone": "Warning Zone C",
+      "severity": "warning",
+      "duration": 0.0,
+      "incident_id": "INC-0001",
+      "frame": 178,
+      "description": "Worker 6 entered WARNING zone 'Warning Zone C'.",
+      "dwell_time": 0.0,
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "evidence_frame": "data\\incidents\\evidence\\INC-0001_6_w6_frame178.jpg",
+      "worker_bbox": [
+        1154.5,
+        199.6,
+        1519.9,
+        750.8
+      ],
+      "worker_center": [
+        1337.2,
+        475.2
+      ]
+    },
+    {
+      "worker_id": 6,
+      "event": "restricted_zone_entry",
+      "timestamp": 6.13,
+      "zone": "Machine Zone B",
+      "severity": "high",
+      "duration": 0.0,
+      "incident_id": "INC-0002",
+      "frame": 184,
+      "description": "Worker 6 entered RESTRICTED zone 'Machine Zone B'.",
+      "dwell_time": 0.0,
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "evidence_frame": "data\\incidents\\evidence\\INC-0002_6_w6_frame184.jpg",
+      "worker_bbox": [
+        1172.4,
+        172.9,
+        1527.9,
+        740.1
+      ],
+      "worker_center": [
+        1350.1,
+        456.5
+      ]
+    },
+    {
+      "worker_id": 10,
+      "event": "warning_zone_entry",
+      "timestamp": 8.17,
+      "zone": "Warning Zone A",
+      "severity": "warning",
+      "duration": 0.0,
+      "incident_id": "INC-0003",
+      "frame": 245,
+      "description": "Worker 10 entered WARNING zone 'Warning Zone A'.",
+      "dwell_time": 0.0,
+      "ppe_status": {
+        "helmet": "unknown",
+        "vest": "unknown",
+        "boots": "unknown"
+      },
+      "evidence_frame": "data\\incidents\\evidence\\INC-0003_10_w10_frame245.jpg",
+      "worker_bbox": [
+        446.4,
+        52.3,
+        822.4,
+        820.8
+      ],
+      "worker_center": [
+        634.4,
+        436.5
+      ]
+    }
+  ]
 }

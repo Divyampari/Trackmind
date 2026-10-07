@@ -81,22 +81,25 @@ class Zone:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert zone to plain dictionary for JSON serialization."""
+        pts = [[round(float(pt[0]), 1), round(float(pt[1]), 1)] for pt in self.polygon]
         return {
             "name": self.name,
             "type": self.type,
-            "polygon": [[round(float(pt[0]), 1), round(float(pt[1]), 1)] for pt in self.polygon],
+            "points": pts,
+            "polygon": pts,
             "dwell_threshold": round(float(self.dwell_threshold), 2),
             "description": self.description,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Zone":
-        """Instantiate Zone from dictionary."""
+        """Instantiate Zone from dictionary supporting either 'points' or 'polygon' keys."""
         default_dwell = 5.0 if data.get("type", "restricted") == "restricted" else 10.0
+        poly = data.get("points") or data.get("polygon") or []
         return cls(
             name=data["name"],
             type=data.get("type", "restricted"),
-            polygon=data["polygon"],
+            polygon=poly,
             dwell_threshold=data.get("dwell_threshold", default_dwell),
             description=data.get("description", ""),
         )

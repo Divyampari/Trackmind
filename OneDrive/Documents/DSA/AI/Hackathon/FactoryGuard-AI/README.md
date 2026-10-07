@@ -1,4 +1,4 @@
-﻿# FactoryGuard AI
+# FactoryGuard AI
 
 **AI-Powered Factory Safety Monitoring System**
 
@@ -15,9 +15,155 @@ The project is built collaboratively across **4 phases**:
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **Phase 1** | Computer Vision Foundation (Detection & Tracking) | ✅ Refined & Verified |
-| **Phase 2** | Behaviour Intelligence | 🔲 Pending |
+| **Phase 2** | Behaviour Intelligence (Video Streaming, Zone Entry/Exit, Dwell, Events) | ✅ Complete & Verified |
 | **Phase 3** | Evidence & Incident Intelligence | 🔲 Pending |
 | **Phase 4** | Dashboard & User Interface | 🔲 Pending |
+
+---
+
+## Phase 2 — Behaviour Intelligence (Video Pipeline)
+
+Phase 2 builds directly upon Phase 1 tracking output without rebuilding or modifying YOLO + ByteTrack detection. It provides real-time spatial and temporal intelligence across video footage:
+
+- **Full Video Frame-by-Frame Processing:** Streams video sequentially using `cv2.VideoCapture` and `cv2.VideoWriter` without loading the whole video into memory.
+- **Interactive Multi-Zone Drawing:** Interactive OpenCV UI on the video's first frame allows operators to click polygon vertices to define custom zones.
+- **Zone Configuration Persistence:** Saves zone coordinates, names, types (`restricted`, `warning`), and dwell thresholds into JSON (`data/zones/factory_zone_config.json`).
+- **Point-in-Polygon Center Point Tracking:** Uses `cv2.pointPolygonTest` on each worker's midpoint `[cx, cy]` to determine whether they are inside/outside.
+- **Temporal Event Detection:**
+  - **Zone Entry:** Generates `restricted_zone_entry` or `warning_zone_entry` when transition occurs from outside to inside.
+  - **Prolonged Presence / Dwell:** Measures stay duration (seconds) via video timestamps and triggers `prolonged_restricted_zone_presence` when `dwell_time >= DWELL_THRESHOLD_SECONDS` (default: 5.0s).
+  - **Zone Exit:** Detects when worker leaves zone, resetting state to allow new entries.
+  - **Independent Multi-Worker & Multi-Zone Tracking:** Concurrently tracks separate dwell timers and states for each worker across multiple safety zones.
+- **Outputs Generated:**
+  - **Real Annotated Output Video:** `outputs/phase2_output.mp4` with semi-transparent zone polygons, worker bounding boxes, worker IDs, center points, and safety status badges.
+  - **Machine-Readable Behaviour Events JSON:** `data/behaviour/behaviour_events.json` structured for Phase 3 downstream incident handling.
+
+### Phase 2 Pipeline
+
+```
+Factory Video (e.g. videos/test_factory.mp4)
+       ↓
+Display First Video Frame
+       ↓
+User Draws Safety Zones (or loads saved JSON)
+       ↓
+Save Polygon Coordinates (data/zones/factory_zone_config.json)
+       ↓
+Stream Video Frame-by-Frame
+       ↓
+Phase 1 YOLOv8s + ByteTrack Tracker
+       ↓
+Worker Midpoint [cx, cy] vs Polygon (cv2.pointPolygonTest)
+       ↓
+State Transitions (Entry / Exit / Prolonged Dwell)
+       ↓
+┌─────────────────────────────────┬──────────────────────────────────────┐
+│ Real Annotated Output Video     │ Structured Behaviour Events (JSON)   │
+│ outputs/phase2_output.mp4       │ data/behaviour/behaviour_events.json │
+└─────────────────────────────────┴──────────────────────────────────────┘
+```
+
+---
+
+## Phase 2 Usage & Commands
+
+### 1. Run Complete Phase 2 on a Video
+
+```bash
+python phase2.py videos/test_factory.mp4
+```
+
+### 2. Draw / Re-draw Custom Safety Zones
+
+To launch the interactive zone drawer on the first frame:
+
+```bash
+python phase2.py videos/test_factory.mp4 --draw-zones
+```
+
+**Interactive Zone Drawing Controls:**
+- **Left Mouse Click:** Place polygon vertex points.
+- **Key `r`:** Finalize current polygon as **RESTRICTED** zone (e.g. `Machine Zone A`).
+- **Key `w`:** Finalize current polygon as **WARNING** zone (e.g. `Warning Corridor B`).
+- **Key `c`:** Clear current points in progress.
+- **Key `d`:** Delete / clear all defined zones.
+- **Key `s` / ESC / `q`:** Save configuration and proceed to video analysis.
+
+### 3. Customize Dwell Threshold & Output Paths
+
+```bash
+python phase2.py videos/test_factory.mp4 --dwell-threshold 5.0 --output-video outputs/phase2_output.mp4 --events data/behaviour/behaviour_events.json
+```
+
+### 4. Standalone Zone Configuration Utility
+
+```bash
+# Interactively define zones for a video
+python zone_config.py --video videos/test_factory.mp4
+
+# Inspect saved zones
+python zone_config.py --list
+```
+
+---
+
+## Zone Configuration Schema (`data/zones/factory_zone_config.json`)
+
+```json
+{
+  "zones": [
+    {
+      "name": "Machine Zone A",
+      "type": "restricted",
+      "points": [
+        [120, 150],
+        [500, 150],
+        [500, 450],
+        [120, 450]
+      ],
+      "dwell_threshold": 5.0
+    },
+    {
+      "name": "Warning Corridor B",
+      "type": "warning",
+      "points": [
+        [550, 200],
+        [850, 200],
+        [850, 600],
+        [550, 600]
+      ],
+      "dwell_threshold": 10.0
+    }
+  ]
+}
+```
+
+---
+
+## Behaviour Events Schema (`data/behaviour/behaviour_events.json`)
+
+```json
+{
+  "events": [
+    {
+      "worker_id": 1,
+      "event": "restricted_zone_entry",
+      "timestamp": 7.3,
+      "zone": "Machine Zone A",
+      "severity": "high",
+      "duration": 0.0
+    },
+    {
+      "worker_id": 1,
+      "event": "prolonged_restricted_zone_presence",
+      "timestamp": 9.3,
+      "zone": "Machine Zone A",
+      "severity": "critical",
+      "duration": 2.0
+    }
+  ]
+}
+```
 
 ---
 

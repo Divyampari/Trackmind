@@ -104,12 +104,130 @@ class BehaviourEngine:
 
         return annotated, new_incidents
 
+    def process_video(
+        self,
+        video_path: str,
+        output_video_path: str = "outputs/phase2_output.mp4",
+        behaviour_output_path: str = "data/behaviour/behaviour_events.json",
+        report_output_path: str = "data/incidents/incidents_report.json",
+        model_path: str = "yolov8s.pt",
+        confidence: float = 0.45,
+    ) -> Dict[str, Any]:
+        """Stream an entire video frame-by-frame through Phase 1 tracking and Phase 2 behaviour analysis.
+
+        Does NOT buffer video frames in memory. Uses OpenCV VideoCapture and VideoWriter.
+
+        Args:
+            video_path: Path to input video file.
+            output_video_path: Destination path for annotated output video.
+            behaviour_output_path: Destination path for behaviour_events.json.
+            report_output_path: Destination path for incidents_report.json.
+            model_path: YOLO model name or path.
+            confidence: Detection confidence threshold.
+
+        Returns:
+            Dictionary summary of results.
+        """
+        from detection.tracker import WorkerTracker
+
+        if not os.path.isfile(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            raise ValueError(f"Cannot open video file: {video_path}")
+
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        total_frames_est = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_name = os.path.basename(video_path)
+
+        self.zone_manager.video_name = video_name
+        self.zone_manager.resolution = [w, h]
+
+        # Check if interactive zone setup requested or if no zones are configured
+        if self.interactive_zones or len(self.zone_manager.zones) == 0:
+            ret, first_frame = cap.read()
+            if ret and first_frame is not None:
+                self.zone_manager.interactive_define_zones(first_frame, video_name=video_name)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # rewind to start
+
+        # Set up output video writer
+        os.makedirs(os.path.dirname(output_video_path) or ".", exist_ok=True)
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(output_video_path, fourcc, fps, (w, h))
+        if not writer.isOpened():
+            cap.release()
+            raise RuntimeError(f"Cannot open VideoWriter for {output_video_path}")
+
+        # Initialize Phase 1 WorkerTracker
+        tracker = WorkerTracker(model_path=model_path, confidence=confidence)
+        if tracker.model is None:
+            tracker._load_model()
+
+        logger.info(
+            "Starting Phase 2 processing: '%s' (%dx%d @ %.1f FPS, %d zones)",
+            video_name, w, h, fps, len(self.zone_manager.zones)
+        )
+
+        frame_number = 0
+        try:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+
+                timestamp = frame_number / fps
+
+                # 1. Phase 1: Track workers with YOLO + ByteTrack
+                frame_record = tracker._process_frame(frame, frame_number, timestamp)
+
+                # 2. Phase 2: Behaviour Intelligence & Safety Zone Evaluation
+                annotated_frame, _ = self.process_frame(
+                    frame=frame,
+                    frame_number=frame_number,
+                    timestamp=timestamp,
+                    workers=frame_record.workers,
+                )
+
+                # 3. Write annotated frame to output video
+                if annotated_frame is not None:
+                    writer.write(annotated_frame)
+
+                frame_number += 1
+                if frame_number % 100 == 0:
+                    pct = (frame_number / max(total_frames_est, 1)) * 100
+                    logger.info("Processed %d / ~%d frames (%.1f%%)", frame_number, total_frames_est, pct)
+
+        finally:
+            cap.release()
+            writer.release()
+
+        # Save structured behaviour events and incident report
+        saved_events = self.incident_manager.save_behaviour_events(behaviour_output_path)
+        saved_report = self.incident_manager.save_report(report_output_path)
+
+        summary = {
+            "video": video_name,
+            "total_frames": frame_number,
+            "fps": fps,
+            "resolution": [w, h],
+            "zones_monitored": len(self.zone_manager.zones),
+            "total_incidents": len(self.incident_manager.incidents),
+            "behaviour_events_path": saved_events,
+            "incidents_report_path": saved_report,
+            "output_video_path": output_video_path,
+        }
+        return summary
+
     def process_tracking_data(
         self,
         tracking_data: Union[dict, Any],
         video_path: Optional[str] = None,
         output_video_path: Optional[str] = None,
         report_output_path: Optional[str] = None,
+        behaviour_output_path: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Process an entire video or saved Phase 1 TrackingData object.
 
@@ -118,6 +236,7 @@ class BehaviourEngine:
             video_path: Path to raw input video (required for annotated video render & evidence capture).
             output_video_path: Destination path for Phase 2 annotated output video.
             report_output_path: Destination path for Phase 2 JSON incident report.
+            behaviour_output_path: Destination path for Phase 2 behaviour events JSON.
 
         Returns:
             Dictionary summary of Phase 2 behaviour analysis results.
@@ -189,15 +308,18 @@ class BehaviourEngine:
         if writer:
             writer.release()
 
-        # Save incident report
+        # Save incident report and behaviour events
         dest_report = report_output_path or os.path.join("data", "incidents", "incidents_report.json")
         saved_report_path = self.incident_manager.save_report(dest_report)
+        dest_events = behaviour_output_path or os.path.join("data", "behaviour", "behaviour_events.json")
+        saved_events_path = self.incident_manager.save_behaviour_events(dest_events)
 
         summary = {
             "video": video_name,
             "total_frames": total_frames,
             "zones_monitored": len(self.zone_manager.zones),
             "total_incidents": len(self.incident_manager.incidents),
+            "behaviour_events_path": saved_events_path,
             "incidents_report_path": saved_report_path,
             "output_video_path": output_video_path or "",
         }
@@ -210,7 +332,7 @@ class BehaviourEngine:
         timestamp: float,
         workers: List[Any],
     ) -> np.ndarray:
-        """Render safety zones, worker status badges, active incident highlights, and HUD."""
+        """Render safety zones, worker center points, status badges, and HUD."""
         annotated = frame.copy()
         h, w = annotated.shape[:2]
 
@@ -231,14 +353,14 @@ class BehaviourEngine:
             cv2.putText(
                 annotated,
                 f"[{zone.type.upper()}] {zone.name}",
-                (cx - 50, cy),
+                (max(10, cx - 60), cy),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.55,
                 (255, 255, 255),
                 2,
             )
 
-        # 2. Render Workers with Safety Badges
+        # 2. Render Workers with Center Points and Safety Badges
         active_violations_count = 0
         for worker in workers:
             w_id = worker.id if hasattr(worker, "id") else worker["id"]
@@ -246,19 +368,25 @@ class BehaviourEngine:
                 continue
 
             bbox = worker.bbox if hasattr(worker, "bbox") else worker["bbox"]
+            center = worker.center if hasattr(worker, "center") else worker.get("center", [(bbox[0]+bbox[2])/2, (bbox[1]+bbox[3])/2])
             x1, y1, x2, y2 = [int(c) for c in bbox]
+            cx, cy = int(center[0]), int(center[1])
 
             # Determine worker safety status
-            status_text = f"Worker {w_id}"
+            status_text = f"Worker {w_id} | SAFE"
             box_color = (0, 255, 128)  # Green for normal
 
             # Check active zone states for this worker
             in_restricted = False
             in_warning = False
             dwell_alert = False
+            active_zone_name = ""
+            active_dwell = 0.0
 
             for (w_key, z_name), state in self.zone_detector.active_states.items():
                 if w_key == w_id:
+                    active_zone_name = z_name
+                    active_dwell = state.dwell_time
                     if state.zone_type == ZoneType.RESTRICTED.value:
                         in_restricted = True
                         if state.dwell_alerted:
@@ -270,22 +398,25 @@ class BehaviourEngine:
                 active_violations_count += 1
                 if dwell_alert:
                     box_color = (0, 0, 255)
-                    status_text = f"Worker {w_id} | CRITICAL (Dwell Breach)"
+                    status_text = f"Worker {w_id} | {active_zone_name} | CRITICAL | Dwell: {active_dwell:.1f}s"
                 else:
                     box_color = (0, 0, 220)
-                    status_text = f"Worker {w_id} | RESTRICTED AREA"
+                    status_text = f"Worker {w_id} | {active_zone_name} | RESTRICTED ZONE"
             elif in_warning:
                 box_color = (0, 255, 255)
-                status_text = f"Worker {w_id} | WARNING ZONE"
+                status_text = f"Worker {w_id} | {active_zone_name} | WARNING ZONE"
 
-            # Draw bounding box
+            # Draw worker bounding box
             cv2.rectangle(annotated, (x1, y1), (x2, y2), box_color, 2)
 
-            # Label box
-            (tw, th), bl = cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 2)
+            # Draw worker center point
+            cv2.circle(annotated, (cx, cy), 4, (0, 0, 255) if in_restricted else (0, 255, 255), -1)
+
+            # Draw status label badge
+            (tw, th), bl = cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.50, 2)
             lbl_y = max(y1 - 8, th + 5)
-            cv2.rectangle(annotated, (x1, lbl_y - th - 4), (x1 + tw + 6, lbl_y + bl), (40, 40, 40), -1)
-            cv2.putText(annotated, status_text, (x1 + 3, lbl_y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 2)
+            cv2.rectangle(annotated, (x1, lbl_y - th - 4), (x1 + tw + 6, lbl_y + bl), (30, 30, 30), -1)
+            cv2.putText(annotated, status_text, (x1 + 3, lbl_y), cv2.FONT_HERSHEY_SIMPLEX, 0.50, (255, 255, 255), 2)
 
         # 3. Render Top HUD Bar
         hud_h = 35

@@ -1,0 +1,28 @@
+{
+  "events": [
+    {
+      "worker_id": 6,
+      "event": "warning_zone_entry",
+      "timestamp": 5.93,
+      "zone": "Warning Zone C",
+      "severity": "warning",
+      "duration": 0.0
+    },
+    {
+      "worker_id": 6,
+      "event": "restricted_zone_entry",
+      "timestamp": 6.13,
+      "zone": "Machine Zone B",
+      "severity": "high",
+      "duration": 0.0
+    },
+    {
+      "worker_id": 10,
+      "event": "warning_zone_entry",
+      "timestamp": 8.17,
+      "zone": "Warning Zone A",
+      "severity": "warning",
+      "duration": 0.0
+    }
+  ]
+}

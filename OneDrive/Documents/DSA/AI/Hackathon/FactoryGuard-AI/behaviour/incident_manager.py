@@ -58,15 +58,16 @@ class SafetyIncident:
     worker_center: List[float] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert incident to plain dictionary for JSON reporting."""
+        """Convert incident to plain dictionary matching Phase 2 specification."""
         return {
-            "incident_id": self.incident_id,
-            "worker_id": self.worker_id,
+            "worker_id": int(self.worker_id),
             "event": self.event,
-            "timestamp": round(float(self.timestamp), 3),
-            "frame": int(self.frame),
+            "timestamp": round(float(self.timestamp), 2),
             "zone": self.zone,
-            "severity": self.severity,
+            "severity": self.severity.lower(),
+            "duration": round(float(self.dwell_time), 2),
+            "incident_id": self.incident_id,
+            "frame": int(self.frame),
             "description": self.description,
             "dwell_time": round(float(self.dwell_time), 2),
             "ppe_status": self.ppe_status,
@@ -171,6 +172,28 @@ class IncidentManager:
             "event_breakdown": event_counts,
             "worker_breakdown": worker_counts,
         }
+
+    def save_behaviour_events(
+        self, filepath: str = os.path.join("data", "behaviour", "behaviour_events.json")
+    ) -> str:
+        """Save standard machine-readable behaviour events JSON for Phase 3 integration."""
+        os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+        events_list = [
+            {
+                "worker_id": inc.worker_id,
+                "event": inc.event,
+                "timestamp": round(float(inc.timestamp), 2),
+                "zone": inc.zone,
+                "severity": inc.severity.lower(),
+                "duration": round(float(inc.dwell_time), 2),
+            }
+            for inc in self.incidents
+        ]
+        payload = {"events": events_list}
+        with open(filepath, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+        logger.info("Behaviour events saved to: %s (%d events)", filepath, len(events_list))
+        return filepath
 
     def save_report(self, filepath: str = os.path.join("data", "incidents", "incidents_report.json")) -> str:
         """Save all incidents and summary report to JSON file.

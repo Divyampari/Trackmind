@@ -252,6 +252,105 @@ class TestPhase2BehaviourIntelligence(unittest.TestCase):
         if os.path.isfile(filepath):
             os.remove(filepath)
 
+    def test_13_worker_reentry_after_exit(self):
+        """Scenario 13: Worker exits zone and re-enters later, generating a new entry event."""
+        detector = ZoneDetector(grace_period=0.5)
+        worker_in = {"id": 7, "bbox": [150, 150, 210, 250], "center": [180, 200], "confidence": 0.9}
+        worker_out = {"id": 7, "bbox": [10, 10, 50, 50], "center": [30, 30], "confidence": 0.9}
+
+        # 1. Entry at t=1.0s
+        ev1 = detector.update(frame_number=30, timestamp=1.0, workers=[worker_in], zones=self.zones)
+        self.assertEqual(len(ev1), 1)
+        self.assertEqual(ev1[0].event_type, EventType.RESTRICTED_ENTRY.value)
+
+        # 2. Exit at t=2.0s
+        ev2 = detector.update(frame_number=60, timestamp=2.0, workers=[worker_out], zones=self.zones)
+        self.assertEqual(len(ev2), 1)
+        self.assertEqual(ev2[0].event_type, EventType.RESTRICTED_EXIT.value)
+
+        # 3. Re-entry at t=5.0s -> Must trigger a NEW entry event!
+        ev3 = detector.update(frame_number=150, timestamp=5.0, workers=[worker_in], zones=self.zones)
+        self.assertEqual(len(ev3), 1)
+        self.assertEqual(ev3[0].event_type, EventType.RESTRICTED_ENTRY.value)
+        self.assertEqual(ev3[0].worker_id, 7)
+
+    def test_14_behaviour_events_json_schema(self):
+        """Scenario 14: Verify machine-readable data/behaviour/behaviour_events.json format."""
+        import json
+        inc_mgr = IncidentManager(cooldown_seconds=1.0)
+        inc_mgr.create_incident(
+            worker_id=7,
+            event="restricted_zone_entry",
+            timestamp=12.4,
+            frame=372,
+            zone="Machine Zone A",
+            severity="warning",
+            description="Entry into machine zone",
+            dwell_time=0.0,
+            ppe_status={},
+            worker_bbox=[100, 100, 200, 200],
+            worker_center=[150, 150],
+        )
+        inc_mgr.create_incident(
+            worker_id=7,
+            event="prolonged_restricted_zone_presence",
+            timestamp=18.6,
+            frame=558,
+            zone="Machine Zone A",
+            severity="critical",
+            description="Prolonged stay",
+            dwell_time=6.2,
+            ppe_status={},
+            worker_bbox=[100, 100, 200, 200],
+            worker_center=[150, 150],
+        )
+
+        test_events_file = os.path.join("data", "behaviour", "test_behaviour_events.json")
+        saved_path = inc_mgr.save_behaviour_events(test_events_file)
+        self.assertTrue(os.path.isfile(saved_path))
+
+        with open(saved_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.assertIn("events", data)
+        self.assertEqual(len(data["events"]), 2)
+
+        ev0 = data["events"][0]
+        self.assertEqual(ev0["worker_id"], 7)
+        self.assertEqual(ev0["event"], "restricted_zone_entry")
+        self.assertEqual(ev0["timestamp"], 12.4)
+        self.assertEqual(ev0["zone"], "Machine Zone A")
+        self.assertEqual(ev0["severity"], "warning")
+        self.assertEqual(ev0["duration"], 0.0)
+
+        ev1 = data["events"][1]
+        self.assertEqual(ev1["worker_id"], 7)
+        self.assertEqual(ev1["event"], "prolonged_restricted_zone_presence")
+        self.assertEqual(ev1["timestamp"], 18.6)
+        self.assertEqual(ev1["zone"], "Machine Zone A")
+        self.assertEqual(ev1["severity"], "critical")
+        self.assertEqual(ev1["duration"], 6.2)
+
+        if os.path.isfile(saved_path):
+            os.remove(saved_path)
+
+    def test_15_zone_points_and_polygon_support(self):
+        """Scenario 15: Verify Zone serialization and deserialization with 'points' and 'polygon'."""
+        zone_dict = {
+            "name": "Machine Zone A",
+            "type": "restricted",
+            "points": [[120, 150], [500, 150], [500, 450], [120, 450]],
+            "dwell_threshold": 5.0
+        }
+        zone = Zone.from_dict(zone_dict)
+        self.assertEqual(zone.name, "Machine Zone A")
+        self.assertEqual(len(zone.polygon), 4)
+
+        serialized = zone.to_dict()
+        self.assertIn("points", serialized)
+        self.assertIn("polygon", serialized)
+        self.assertEqual(serialized["points"], zone.polygon)
+
 
 if __name__ == "__main__":
     unittest.main()

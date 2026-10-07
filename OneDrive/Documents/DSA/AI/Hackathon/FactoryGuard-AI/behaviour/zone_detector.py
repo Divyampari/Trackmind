@@ -27,10 +27,12 @@ logger = logging.getLogger("factoryguard.behaviour.zone_detector")
 class EventType(str, Enum):
     """Event types generated during worker-zone state transitions."""
     RESTRICTED_ENTRY = "restricted_zone_entry"
-    RESTRICTED_DWELL = "restricted_zone_dwell"
+    RESTRICTED_DWELL = "prolonged_restricted_zone_presence"
+    RESTRICTED_DWELL_ALT = "restricted_zone_dwell"
     RESTRICTED_EXIT = "restricted_zone_exit"
     WARNING_ENTRY = "warning_zone_entry"
-    WARNING_DWELL = "warning_zone_dwell"
+    WARNING_DWELL = "prolonged_warning_zone_presence"
+    WARNING_DWELL_ALT = "warning_zone_dwell"
     WARNING_EXIT = "warning_zone_exit"
 
 
@@ -60,15 +62,22 @@ class ZoneEvent:
     worker_center: List[float]
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert event to plain dictionary."""
+        """Convert event to plain dictionary matching Phase 2 specification."""
+        sev = "critical" if ("prolonged" in self.event_type or "dwell" in self.event_type) else (
+            "warning" if self.zone_type == "restricted" or "warning" in self.event_type else "info"
+        )
         return {
+            "worker_id": int(self.worker_id),
+            "event": self.event_type,
             "event_type": self.event_type,
-            "worker_id": self.worker_id,
+            "timestamp": round(float(self.timestamp), 2),
+            "zone": self.zone_name,
             "zone_name": self.zone_name,
             "zone_type": self.zone_type,
-            "timestamp": round(float(self.timestamp), 3),
-            "frame": int(self.frame),
+            "severity": sev,
+            "duration": round(float(self.dwell_time), 2),
             "dwell_time": round(float(self.dwell_time), 2),
+            "frame": int(self.frame),
             "worker_bbox": [round(float(c), 1) for c in self.worker_bbox],
             "worker_center": [round(float(c), 1) for c in self.worker_center],
         }
