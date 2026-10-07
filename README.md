@@ -1,5 +1,3 @@
-Yep 😭 — you want the **actual README/report content**, not the prompt. Here’s the clean copy-paste version:
-
 ````markdown
 # Trackmind
 
